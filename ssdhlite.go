@@ -105,6 +105,10 @@ func (h *SQLServerHelper) Commit() error {
 		return nil
 	}
 
+	if h.db == nil {
+		return errors.New(`No connection of the object was initialized`)
+	}
+
 	if h.tx == nil {
 		return errors.New(`No transaction was initialized`)
 	}
@@ -134,6 +138,10 @@ func (h *SQLServerHelper) Rollback() error {
 		return nil
 	}
 
+	if h.db == nil {
+		return errors.New(`No connection of the object was initialized`)
+	}
+
 	if h.tx == nil {
 		return errors.New(`No transaction was initialized`)
 	}
@@ -160,6 +168,10 @@ func (h *SQLServerHelper) Mark(name string) error {
 
 	var err error
 
+	if h.db == nil {
+		return errors.New(`No connection of the object was initialized`)
+	}
+
 	if h.tx == nil {
 		return errors.New(`No transaction was initialized`)
 	}
@@ -173,6 +185,10 @@ func (h *SQLServerHelper) Mark(name string) error {
 func (h *SQLServerHelper) Discard(name string) error {
 	var err error
 
+	if h.db == nil {
+		return errors.New(`No connection of the object was initialized`)
+	}
+
 	if h.tx == nil {
 		return errors.New(`No transaction was initialized`)
 	}
@@ -185,6 +201,10 @@ func (h *SQLServerHelper) Discard(name string) error {
 // Save a savepoint
 func (h *SQLServerHelper) Save(name string) error {
 	var err error
+
+	if h.db == nil {
+		return errors.New(`No connection of the object was initialized`)
+	}
 
 	if h.tx == nil {
 		return errors.New(`No transaction was initialized`)
@@ -202,6 +222,10 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 		err error
 		sqr *dsql.Rows
 	)
+
+	if h.db == nil {
+		return nil, errors.New(`No connection of the object was initialized`)
+	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
@@ -229,6 +253,10 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 // QueryRow from PostgreSQL helper
 func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 
+	if h.db == nil {
+		return nil
+	}
+
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
@@ -248,6 +276,10 @@ func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 		ra  int64
 		sq  dsql.Result
 	)
+
+	if h.db == nil {
+		return 0, errors.New(`No connection of the object was initialized`)
+	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
@@ -270,6 +302,11 @@ func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 
 // VerifyWithin a set of validation expression against the underlying database table
 func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpression) (Valid bool, QueryOK bool, Message string) {
+
+	if h.db == nil {
+		return false, false, `No connection of the object was initialized`
+	}
+
 	tableNameWithParameters := tablename
 
 	args := make([]interface{}, len(values))
