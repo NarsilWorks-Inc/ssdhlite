@@ -2,6 +2,7 @@ package ssdhlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ func TestGetRows(t *testing.T) {
 		t.Fail()
 		return
 	}
+	defer c.Close()
 
 	rows, err := c.Query(`SELECT EmailKey, Subject, Format, SenderName, SenderAddress, DateQueued FROM tnfEmailSent;`)
 	if err != nil {
@@ -111,6 +113,7 @@ func TestGetRow(t *testing.T) {
 		t.Fail()
 		return
 	}
+	defer c.Close()
 
 	/*
 		var (
@@ -190,4 +193,93 @@ func TestGetRow(t *testing.T) {
 
 	t.Logf("EmailKey: %v, Subject: %v, Format: %v, Sender: %v, SenderAddress: %v, Date Queued: %v",
 		ts.EmailKey, ts.Subject, ts.Format, ts.Sender, ts.SenderAddr, ts.DateQueued)
+}
+
+func TestWriteTransactions(t *testing.T) {
+
+	var (
+		err error
+		//affr int64
+		c dhl.DataHelperLite
+	)
+
+	//c = &SQLServerHelper{}
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`DEFAULT`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	i := 0
+
+	c.Begin()
+
+	for {
+
+		if i > 999 {
+			break
+		}
+
+		_, err = c.Exec(`INSERT INTO tnfTelegramOutBox (
+									ApplicationID,
+									TelegramID,
+									Message,
+									[Status],
+									TransactionDate,
+									GuiID,
+									Principal,
+									PrinGroup,
+									CustPONo,
+									PoStatus)
+							VALUES ('TestApp',
+									'3dadasdas',
+									 'Message' + @p1,
+									1,
+									GETDATE(),
+									NEWID(),
+									@p2,
+									'TESTGRP',
+									'PONO',
+									'OK');`, fmt.Sprintf("%d", i), i)
+		if err != nil {
+			c.Rollback()
+			t.Log(err.Error())
+			break
+		}
+
+		/*
+			if (i % 5) == 0 {
+				c.Mark(`MO`)
+			}
+
+			if (i % 10) == 0 {
+				//c.Save(`MO`)
+				c.Discard(`MO`)
+			}
+		*/
+
+		//t.Logf("%d affected rows", affr)
+
+		i++
+	}
+
+	// c.Rollback()
+	c.Commit()
+
 }
