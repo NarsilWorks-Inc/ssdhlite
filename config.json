@@ -1,0 +1,21 @@
+{
+    "DefaultDatabaseID": "DEFAULT",
+    "Flags" : [
+        {"Key": "debug", "Value": "true"},
+        {"Key":"helperid", "Value": "ssdhlite"}
+    ],
+    "Databases" : [
+        {
+            "ID" : "DEFAULT",
+            "Schema": "public",
+            "ConnectionString" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()"
+        }
+    ]
+}

@@ -1,6 +1,8 @@
-package sshlite
+package ssdhlite
 
-import "database/sql"
+import (
+	"database/sql"
+)
 
 // SQLServerRows struct
 type SQLServerRows struct {
@@ -35,7 +37,21 @@ func (ss SQLServerRows) Next() bool {
 
 // Scan to destination variables
 func (ss SQLServerRows) Scan(dest ...interface{}) error {
-	return ss.Scan(dest...)
+
+	destq := prepareDest(dest)
+
+	err := ss.sqr.Scan(destq...)
+	if err != nil {
+		return err
+	}
+
+	// return values
+	err = copyScannedToDest(dest, destq)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Values from the rows

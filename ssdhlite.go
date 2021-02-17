@@ -1,4 +1,4 @@
-package sshlite
+package ssdhlite
 
 import (
 	"context"
@@ -20,6 +20,7 @@ type SQLServerHelper struct {
 	dbi    *cfg.DatabaseInfo
 	ctx    context.Context
 	rws    dhl.Rows
+	rw     dhl.Row
 	trcnt  int
 	reused bool
 }
@@ -262,10 +263,12 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
 
 	if h.tx != nil {
-		return h.tx.QueryRowContext(h.ctx, sql, args...)
+		h.rw = NewSQLServerRow(h.tx.QueryRowContext(h.ctx, sql, args...))
 	}
 
-	return h.db.QueryRowContext(h.ctx, sql, args...)
+	h.rw = NewSQLServerRow(h.db.QueryRowContext(h.ctx, sql, args...))
+
+	return h.rw
 }
 
 // Exec from PostgreSQL helper
