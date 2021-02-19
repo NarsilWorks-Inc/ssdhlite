@@ -15,7 +15,12 @@
             "ParameterInSequence": true,
             "StorageType": "SERVER",
             "GroupID": "DEFAULT",
-            "UTCDateFunction":"GETUTCDATE()"
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGenerator" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
         }
     ]
 }
