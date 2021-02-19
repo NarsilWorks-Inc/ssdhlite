@@ -43,7 +43,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 
 	h.dbi = di
 	h.ctx = ctx
-	h.reused = true
 
 	if h.db == nil {
 		h.db, err = dsql.Open(`sqlserver`, di.ConnectionString)
@@ -51,6 +50,8 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 			return err
 		}
 		h.reused = false
+	} else {
+		h.reused = true
 	}
 
 	return nil
@@ -63,7 +64,11 @@ func (h *SQLServerHelper) Close() error {
 		return errors.New(`No connection of the object was initialized`)
 	}
 
-	if h.reused {
+	if h.reused && h.trcnt > 0 {
+		return nil
+	}
+
+	if h.trcnt > 1 {
 		return nil
 	}
 
@@ -93,8 +98,9 @@ func (h *SQLServerHelper) Begin() error {
 		if err != nil {
 			return err
 		}
-		h.trcnt++
 	}
+
+	h.trcnt++
 
 	return nil
 }
@@ -103,7 +109,8 @@ func (h *SQLServerHelper) Begin() error {
 func (h *SQLServerHelper) Commit() error {
 
 	// exit if the connection was just reused
-	if h.reused {
+	if h.reused && h.trcnt > 1 {
+		h.trcnt-- // deduct from transaction count
 		return nil
 	}
 
@@ -115,8 +122,10 @@ func (h *SQLServerHelper) Commit() error {
 		return errors.New(`No transaction was initialized`)
 	}
 
-	if err := h.tx.Commit(); err != nil {
-		return err
+	if h.trcnt == 1 {
+		if err := h.tx.Commit(); err != nil {
+			return err
+		}
 	}
 
 	// decrement transaction
@@ -136,7 +145,8 @@ func (h *SQLServerHelper) Commit() error {
 func (h *SQLServerHelper) Rollback() error {
 
 	// exit if the connection was just reused
-	if h.reused {
+	if h.reused && h.trcnt > 1 {
+		h.trcnt-- // deduct from transaction count
 		return nil
 	}
 
@@ -148,8 +158,10 @@ func (h *SQLServerHelper) Rollback() error {
 		return errors.New(`No transaction was initialized`)
 	}
 
-	if err := h.tx.Rollback(); err != nil {
-		return err
+	if h.trcnt == 1 {
+		if err := h.tx.Rollback(); err != nil {
+			return err
+		}
 	}
 
 	// decrement transaction
@@ -178,7 +190,9 @@ func (h *SQLServerHelper) Mark(name string) error {
 		return errors.New(`No transaction was initialized`)
 	}
 
-	_, err = h.tx.ExecContext(h.ctx, `SAVE TRAN sp_`+name+`;`)
+	if h.trcnt > 0 {
+		_, err = h.tx.ExecContext(h.ctx, `SAVE TRAN sp_`+name+`;`)
+	}
 
 	return err
 }
@@ -195,7 +209,9 @@ func (h *SQLServerHelper) Discard(name string) error {
 		return errors.New(`No transaction was initialized`)
 	}
 
-	_, err = h.tx.ExecContext(h.ctx, `ROLLBACK TRAN sp_`+name+`;`)
+	if h.trcnt > 0 {
+		_, err = h.tx.ExecContext(h.ctx, `ROLLBACK TRAN sp_`+name+`;`)
+	}
 
 	return err
 }
@@ -212,7 +228,9 @@ func (h *SQLServerHelper) Save(name string) error {
 		return errors.New(`No transaction was initialized`)
 	}
 
-	_, err = h.tx.ExecContext(h.ctx, `COMMIT TRAN sp_`+name+`;`)
+	if h.trcnt > 0 {
+		_, err = h.tx.ExecContext(h.ctx, `COMMIT TRAN sp_`+name+`;`)
+	}
 
 	return err
 }
