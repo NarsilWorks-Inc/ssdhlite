@@ -63,7 +63,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 func (h *SQLServerHelper) Close() error {
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.reused && h.trcnt > 0 {
@@ -92,7 +92,7 @@ func (h *SQLServerHelper) Begin() error {
 	)
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
@@ -117,11 +117,11 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		return errors.New(`No transaction was initialized`)
+		return dhl.ErrNoTx
 	}
 
 	if h.trcnt == 1 {
@@ -153,11 +153,11 @@ func (h *SQLServerHelper) Rollback() error {
 	}
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		return errors.New(`No transaction was initialized`)
+		return dhl.ErrNoTx
 	}
 
 	if h.trcnt == 1 {
@@ -185,11 +185,11 @@ func (h *SQLServerHelper) Mark(name string) error {
 	var err error
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		return errors.New(`No transaction was initialized`)
+		return dhl.ErrNoTx
 	}
 
 	if h.trcnt > 0 {
@@ -204,11 +204,11 @@ func (h *SQLServerHelper) Discard(name string) error {
 	var err error
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		return errors.New(`No transaction was initialized`)
+		return dhl.ErrNoTx
 	}
 
 	if h.trcnt > 0 {
@@ -223,11 +223,11 @@ func (h *SQLServerHelper) Save(name string) error {
 	var err error
 
 	if h.db == nil {
-		return errors.New(`No connection of the object was initialized`)
+		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		return errors.New(`No transaction was initialized`)
+		return dhl.ErrNoTx
 	}
 
 	if h.trcnt > 0 {
@@ -246,7 +246,7 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 	)
 
 	if h.db == nil {
-		return nil, errors.New(`No connection of the object was initialized`)
+		return nil, dhl.ErrNoConn
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -302,7 +302,7 @@ func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 	)
 
 	if h.db == nil {
-		return 0, errors.New(`No connection of the object was initialized`)
+		return 0, dhl.ErrNoConn
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -334,7 +334,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	)
 
 	if next == nil {
-		return errors.New(`variable in next parameter must be initialized`)
+		return dhl.ErrVarMustBeInit
 	}
 
 	// if the database config has set a sequence generator, this will use it
@@ -396,7 +396,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpression) (Valid bool, QueryOK bool, Message string) {
 
 	if h.db == nil {
-		return false, false, `No connection of the object was initialized`
+		return false, false, dhl.ErrNoConn.Error()
 	}
 
 	tableNameWithParameters := tablename
