@@ -2,6 +2,7 @@ package ssdhlite
 
 import (
 	"database/sql"
+	"errors"
 )
 
 // SQLServerRow struct
@@ -23,13 +24,13 @@ func (ss SQLServerRow) Scan(dest ...interface{}) error {
 
 	err := ss.sqr.Scan(destq...)
 	if err != nil {
-		return err
+		return errors.New(err.Error())
 	}
 
 	// return values
 	err = copyScannedToDest(dest, destq)
 	if err != nil {
-		return err
+		return errors.New(err.Error())
 	}
 
 	return nil
