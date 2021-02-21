@@ -2,6 +2,7 @@ package ssdhlite
 
 import (
 	"context"
+	"database/sql"
 	dsql "database/sql"
 	"errors"
 	"fmt"
@@ -28,7 +29,7 @@ type SQLServerHelper struct {
 
 func init() {
 	dhl.SetHelper(`ssdhlite`, &SQLServerHelper{})
-	dhl.SetErrNoRows("sql: no rows in result set")
+	dhl.SetErrNoRows(sql.ErrNoRows)
 }
 
 // Open a new connection
