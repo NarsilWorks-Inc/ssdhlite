@@ -171,7 +171,7 @@ func TestGetRow(t *testing.T) {
 
 	err = c.QueryRow(`SELECT EmailKey, Subject, Format,
 							SenderName, SenderAddress, DateQueued
-							FROM tnfEmailSent;`).Scan(
+							FROM tnfEmailSent WHERE 1=2;`).Scan(
 		&ts.EmailKey,
 		&ts.Subject,
 		&ts.Format,
@@ -180,9 +180,14 @@ func TestGetRow(t *testing.T) {
 		&ts.DateQueued)
 
 	if err != nil {
+
+		if err != dhl.ErrNoRows {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
 		t.Log(err.Error())
-		t.Fail()
-		return
 	}
 
 	// t.Logf("EmailKey: %v, Subject: %v, Format: %v, Sender: %v, SenderAddress: %v, Date Queued: %v",

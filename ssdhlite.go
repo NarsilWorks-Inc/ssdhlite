@@ -28,6 +28,7 @@ type SQLServerHelper struct {
 
 func init() {
 	dhl.SetHelper(`ssdhlite`, &SQLServerHelper{})
+	dhl.SetErrNoRows("sql: no rows in result set")
 }
 
 // Open a new connection
