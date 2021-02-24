@@ -66,7 +66,10 @@ func (h *SQLServerHelper) Close() error {
 		return dhl.ErrNoConn
 	}
 
-	if h.reused && h.trcnt > 0 {
+	if h.reused {
+		if h.tx != nil && h.trcnt > 0 {
+			return nil
+		}
 		return nil
 	}
 
