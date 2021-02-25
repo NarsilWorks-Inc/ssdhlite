@@ -17,14 +17,14 @@ import (
 
 // SQLServerHelper - a struct derived from datahelperlite
 type SQLServerHelper struct {
-	db     *dsql.DB
-	tx     *dsql.Tx
-	dbi    *cfg.DatabaseInfo
-	ctx    context.Context
-	rws    dhl.Rows
-	rw     dhl.Row
-	trcnt  int
-	reused bool
+	db       *dsql.DB
+	tx       *dsql.Tx
+	dbi      *cfg.DatabaseInfo
+	ctx      context.Context
+	rws      dhl.Rows
+	rw       dhl.Row
+	trcnt    int
+	reusecnt int
 }
 
 func init() {
@@ -51,9 +51,9 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 		if err != nil {
 			return err
 		}
-		h.reused = false
+		h.reusecnt = 0
 	} else {
-		h.reused = true
+		h.reusecnt++
 	}
 
 	return nil
@@ -66,14 +66,10 @@ func (h *SQLServerHelper) Close() error {
 		return dhl.ErrNoConn
 	}
 
-	if h.reused {
-		if h.tx != nil && h.trcnt > 0 {
-			return nil
-		}
-		return nil
-	}
-
-	if h.trcnt > 1 {
+	// if reused, closing will be prevented
+	// until reusing is zero
+	if h.reusecnt > 0 {
+		h.reusecnt--
 		return nil
 	}
 
@@ -82,7 +78,6 @@ func (h *SQLServerHelper) Close() error {
 	}
 
 	h.trcnt = 0
-	h.reused = false
 
 	return nil
 }
@@ -114,7 +109,7 @@ func (h *SQLServerHelper) Begin() error {
 func (h *SQLServerHelper) Commit() error {
 
 	// exit if the connection was just reused
-	if h.reused && h.trcnt > 1 {
+	if h.trcnt > 1 {
 		h.trcnt-- // deduct from transaction count
 		return nil
 	}
@@ -150,7 +145,7 @@ func (h *SQLServerHelper) Commit() error {
 func (h *SQLServerHelper) Rollback() error {
 
 	// exit if the connection was just reused
-	if h.reused && h.trcnt > 1 {
+	if h.trcnt > 1 {
 		h.trcnt-- // deduct from transaction count
 		return nil
 	}
