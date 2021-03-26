@@ -438,8 +438,7 @@ func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpr
 		err    error
 	)
 
-	sql = dhl.InterpolateTable(`SELECT EXISTS (SELECT 1 FROM `+tableNameWithParameters+`);`, h.dbi.Schema)
-
+	sql = `SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM ` + tableNameWithParameters + `) = 1 THEN 1 ELSE 0 END AS BIT);`
 	err = h.QueryRow(sql, args...).Scan(&exists)
 	if err != nil {
 		if !errors.Is(err, dhl.ErrNoRows) {
