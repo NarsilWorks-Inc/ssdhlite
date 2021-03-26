@@ -21,8 +21,6 @@ func (ss SQLServerRows) Close() {
 	if ss.sqr != nil {
 		ss.sqr.Close()
 	}
-
-	return
 }
 
 // Err check

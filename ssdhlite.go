@@ -74,10 +74,12 @@ func (h *SQLServerHelper) Close() error {
 	}
 
 	if err := h.db.Close(); err != nil {
+		h.db = nil
 		return err
 	}
 
 	h.trcnt = 0
+	h.db = nil
 
 	return nil
 }

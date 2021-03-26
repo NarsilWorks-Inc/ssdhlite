@@ -343,3 +343,80 @@ func TestSequence(t *testing.T) {
 
 	t.Logf("Sequence for testsequence: %d", *seq)
 }
+
+func TestMultipleOpen(t *testing.T) {
+
+	var repeat = func() {
+		var (
+			err error
+			c   dhl.DataHelperLite
+		)
+
+		c, err = dhl.New(nil, `ssdhlite`)
+		if err != nil {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
+		cf, err := cfg.LoadConfig(`config.json`)
+		if err != nil {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
+		if err = c.Open(context.Background(), cf.GetDatabaseInfo(`DEFAULT`)); err != nil {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+		defer c.Close()
+
+		rows, err := c.Query(`SELECT TOP 1 EmailKey, Subject, Format, SenderName, SenderAddress, DateQueued FROM tnfEmailSent;`)
+		if err != nil {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+		defer rows.Close()
+
+		var (
+			emailkey                            int64
+			subject, format, sender, senderaddr string
+			datequeued                          time.Time
+		)
+
+		for rows.Next() {
+			err = rows.Scan(
+				&emailkey,
+				&subject,
+				&format,
+				&sender,
+				&senderaddr,
+				&datequeued)
+
+			if err != nil {
+				t.Log(err.Error())
+				t.Fail()
+				return
+			}
+
+			// t.Logf("EmailKey: %d, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
+			// 	emailkey, subject, format, sender, senderaddr, datequeued.Format(`2006-01-02T15:04:05.000Z`))
+
+			t.Logf("EmailKey: %d, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
+				emailkey, subject, format, sender, senderaddr, datequeued)
+		}
+
+		if rows.Err() != nil {
+			t.Log(err.Error())
+			return
+		}
+
+	}
+
+	for i := 0; i < 3; i++ {
+		repeat()
+	}
+}

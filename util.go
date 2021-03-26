@@ -20,7 +20,7 @@ func copyScannedToDest(dest, src []interface{}) error {
 				case **string:
 					*s = &x.String
 				default:
-					return errors.New(`Unhandled sql.NullString type`)
+					return errors.New(`unhandled sql.NullString type`)
 				}
 			}
 		case *sql.NullInt32:
@@ -36,7 +36,7 @@ func copyScannedToDest(dest, src []interface{}) error {
 					ic := int(x.Int32)
 					*s = &ic
 				default:
-					return errors.New(`Unhandled sql.NullInt32 type`)
+					return errors.New(`unhandled sql.NullInt32 type`)
 				}
 			}
 
@@ -48,7 +48,7 @@ func copyScannedToDest(dest, src []interface{}) error {
 				case **int64:
 					*s = &x.Int64
 				default:
-					return errors.New(`Unhandled sql.NullInt64 type`)
+					return errors.New(`unhandled sql.NullInt64 type`)
 				}
 			}
 		case *sql.NullFloat64:
@@ -59,7 +59,7 @@ func copyScannedToDest(dest, src []interface{}) error {
 				case **float64:
 					*s = &x.Float64
 				default:
-					return errors.New(`Unhandled sql.NullFloat64 type`)
+					return errors.New(`unhandled sql.NullFloat64 type`)
 				}
 			}
 		case *sql.NullBool:
@@ -70,7 +70,7 @@ func copyScannedToDest(dest, src []interface{}) error {
 				case **bool:
 					*s = &x.Bool
 				default:
-					return errors.New(`Unhandled sql.NullBool type`)
+					return errors.New(`unhandled sql.NullBool type`)
 				}
 			}
 		case *sql.NullTime:
@@ -81,11 +81,11 @@ func copyScannedToDest(dest, src []interface{}) error {
 				case **time.Time:
 					*s = &x.Time
 				default:
-					return errors.New(`Unhandled sql.NullTime type`)
+					return errors.New(`unhandled sql.NullTime type`)
 				}
 			}
 		default:
-			return errors.New(`Unhandled sql.Null<type>`)
+			return errors.New(`unhandled sql.Null<type>`)
 		}
 	}
 
