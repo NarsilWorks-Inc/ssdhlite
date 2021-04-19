@@ -285,10 +285,10 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 
 	if h.tx != nil {
 		h.rw = NewSQLServerRow(h.tx.QueryRowContext(h.ctx, sql, args...))
+		return h.rw
 	}
 
 	h.rw = NewSQLServerRow(h.db.QueryRowContext(h.ctx, sql, args...))
-
 	return h.rw
 }
 
