@@ -2,7 +2,6 @@ package ssdhlite
 
 import (
 	"context"
-	"database/sql"
 	dsql "database/sql"
 	"errors"
 	"fmt"
@@ -29,7 +28,7 @@ type SQLServerHelper struct {
 
 func init() {
 	dhl.SetHelper(`ssdhlite`, &SQLServerHelper{})
-	dhl.SetErrNoRows(sql.ErrNoRows)
+	dhl.SetErrNoRows(dsql.ErrNoRows)
 }
 
 // Open a new connection
@@ -292,7 +291,7 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 	return h.rw
 }
 
-// Exec from PostgreSQL helper
+// Exec from SQLServerHelper helper
 func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 
 	var (
@@ -324,6 +323,50 @@ func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 	return ra, nil
 }
 
+// Exists checks if a record exist
+func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, error) {
+
+	var (
+		err error
+		cnt int
+		sql string
+	)
+
+	if h.db == nil {
+		return false, nil
+	}
+
+	// replace question mark (?) parameter with configured query parameter, if there are any
+	sqlwparams = dhl.ReplaceQueryParamMarker(sqlwparams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	sqlwparams = dhl.InterpolateTable(sqlwparams, h.dbi.Schema)
+
+	sql = `SELECT TOP 1 1 FROM ` + sqlwparams + `;`
+
+	if h.tx != nil {
+		err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+		if errors.Is(err, dhl.ErrNoRows) {
+			return false, nil
+		}
+
+		if err != nil {
+			return false, err
+		}
+
+		return cnt == 1, nil
+	}
+
+	err = h.db.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+	if errors.Is(err, dhl.ErrNoRows) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return cnt == 1, nil
+}
+
 // Next gets the next serial number
 func (h *SQLServerHelper) Next(serial string, next *int64) error {
 
@@ -342,13 +385,13 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	if sg != nil {
 
 		if sg.NamePlaceHolder == "" {
-			return errors.New(`Name place holder should be provided. ` +
+			return errors.New(`name place holder should be provided. ` +
 				`Set name place holder in {placeholder} format. ` +
 				`Place holder name should also be present in the upsert or select query`)
 		}
 
 		if sg.ResultQuery == "" {
-			return errors.New(`Result query must be provided`)
+			return errors.New(`nesult query must be provided`)
 		}
 
 		// Upsert is usually an insert or an update, so we execute it.
@@ -367,7 +410,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 
 		// in the event that the upsert alters the affr variable to 0, we return an error
 		if affr == 0 {
-			return errors.New(`Upsert query did not insert or update any records`)
+			return errors.New(`upsert query did not insert or update any records`)
 		}
 
 		// result query needs a single scalar value to be returned

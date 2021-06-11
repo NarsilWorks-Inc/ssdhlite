@@ -319,8 +319,7 @@ func TestSequence(t *testing.T) {
 
 	// pointer, must be initialized to int64
 
-	var seq *int64
-	seq = new(int64)
+	seq := new(int64)
 
 	err = c.Next(`testsequence`, seq)
 	if err != nil {
@@ -419,4 +418,45 @@ func TestMultipleOpen(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		repeat()
 	}
+}
+
+func TestExists(t *testing.T) {
+	var (
+		err    error
+		exists bool
+		c      dhl.DataHelperLite
+	)
+
+	//c = &SQLServerHelper{}
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`DEFAULT`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	exists, err = c.Exists(`tnfEmailSent WHERE EmailKey = @p1;`, 7)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	t.Logf("Exists: %t", exists)
+
 }
