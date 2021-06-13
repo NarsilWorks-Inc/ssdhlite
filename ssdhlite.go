@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
 
@@ -269,6 +270,234 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 	}
 
 	return h.rws, err
+}
+
+// QueryArray puts the single column result to an output array
+func (h *SQLServerHelper) QueryArray(sql string, out interface{}, args ...interface{}) error {
+
+	var (
+		err error
+		sqr *dsql.Rows
+	)
+
+	switch out.(type) {
+	case *[]string, *[]int, *[]int8, *[]int16, *[]int32, *[]int64, *[]bool, *[]float32, *[]float64:
+	case *[]time.Time:
+	default:
+		return dhl.ErrArrayTypeNotSupported
+	}
+
+	if h.db == nil {
+		return dhl.ErrNoConn
+	}
+
+	// replace question mark (?) parameter with configured query parameter, if there are any
+	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+
+	// replace tables meant for interpolation {table} for putting the schema
+	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
+
+	if h.tx != nil {
+		sqr, err = h.tx.QueryContext(h.ctx, sql, args...)
+	} else {
+		sqr, err = h.db.QueryContext(h.ctx, sql, args...)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	defer sqr.Close()
+
+	if sqr != nil {
+		switch t := out.(type) {
+		case *[]string:
+
+			arr := make([]string, 0)
+			var a string
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+
+			_ = t
+		case *[]int:
+			arr := make([]int, 0)
+			var a int
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]int8:
+			arr := make([]int8, 0)
+			var a int8
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]int16:
+			arr := make([]int16, 0)
+			var a int16
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]int32:
+			arr := make([]int32, 0)
+			var a int32
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]int64:
+			arr := make([]int64, 0)
+			var a int64
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]bool:
+			arr := make([]bool, 0)
+			var a bool
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]float32:
+			arr := make([]float32, 0)
+			var a float32
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]float64:
+			arr := make([]float64, 0)
+			var a float64
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		case *[]time.Time:
+			arr := make([]time.Time, 0)
+			var a time.Time
+
+			for sqr.Next() {
+				if err = sqr.Scan(&a); err != nil {
+					return err
+				}
+
+				arr = append(arr, a)
+			}
+
+			if err = sqr.Err(); err != nil {
+				return err
+			}
+
+			*t = arr
+			_ = t
+		}
+
+	}
+
+	return nil
 }
 
 // QueryRow from PostgreSQL helper
