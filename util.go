@@ -84,6 +84,15 @@ func copyScannedToDest(dest, src []interface{}) error {
 					return errors.New(`unhandled sql.NullTime type`)
 				}
 			}
+		case *[]byte:
+			switch s := dest[i].(type) {
+			case *[]byte:
+				*s = *x
+			case []byte:
+				s = *x
+			default:
+				return errors.New(`unhandled sql.NullTime type`)
+			}
 		default:
 			return errors.New(`unhandled sql.Null<type>`)
 		}
@@ -120,6 +129,9 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 		case *time.Time, **time.Time:
 
 			destq[i] = &sql.NullTime{}
+		case []uint8, *[]uint8:
+
+			destq[i] = &[]byte{}
 		default:
 			log.Fatal("Unhandled data type: " + reflect.TypeOf(x).Name())
 		}

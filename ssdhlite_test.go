@@ -505,3 +505,57 @@ func TestQueryArray(t *testing.T) {
 	t.Logf("Exists: %t", exists)
 
 }
+
+func TestGetBytes(t *testing.T) {
+	var (
+		err error
+		c   dhl.DataHelperLite
+	)
+
+	//c = &SQLServerHelper{}
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`OFFICE`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	var (
+		fdat []byte
+		fext string
+	)
+
+	err = c.QueryRow(`SELECT Resource,
+							  FileExtension
+						FROM tshApplicationResource
+						WHERE ApplicationID = @p1
+						AND ResourceID = @p2;`,
+		`ArkenstoneTMS`, `E00AFBA42FA84DC5DB2240A7916BF05E15F451F297F5FC86EFC10283866F8CF8`).
+		Scan(&fdat, &fext)
+
+	if err != nil {
+
+		if err != dhl.ErrNoRows {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
+		t.Log(err.Error())
+	}
+}
