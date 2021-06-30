@@ -139,12 +139,9 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 		case *time.Time, **time.Time:
 
 			destq[i] = &sql.NullTime{}
-		case []uint8, *[]uint8:
+		case []uint8, *[]uint8, *json.RawMessage, json.RawMessage:
 
 			destq[i] = &[]byte{}
-		case *json.RawMessage, json.RawMessage:
-
-			destq[i] = &json.RawMessage{}
 		default:
 			log.Fatal("Unhandled data type: " + reflect.TypeOf(x).Name())
 		}
