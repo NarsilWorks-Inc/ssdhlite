@@ -2,6 +2,7 @@ package ssdhlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log"
 	"reflect"
@@ -91,7 +92,16 @@ func copyScannedToDest(dest, src []interface{}) error {
 			case []byte:
 				s = *x
 			default:
-				return errors.New(`unhandled sql.NullTime type`)
+				return errors.New(`unhandled byte type`)
+			}
+		case *json.RawMessage:
+			switch s := dest[i].(type) {
+			case *json.RawMessage:
+				*s = *x
+			case json.RawMessage:
+				s = *x
+			default:
+				return errors.New(`unhandled json.RawMessage type`)
 			}
 		default:
 			return errors.New(`unhandled sql.Null<type>`)
@@ -132,6 +142,9 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 		case []uint8, *[]uint8:
 
 			destq[i] = &[]byte{}
+		case *json.RawMessage, json.RawMessage:
+
+			destq[i] = &json.RawMessage{}
 		default:
 			log.Fatal("Unhandled data type: " + reflect.TypeOf(x).Name())
 		}
