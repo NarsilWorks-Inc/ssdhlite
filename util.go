@@ -91,17 +91,12 @@ func copyScannedToDest(dest, src []interface{}) error {
 				*s = *x
 			case []byte:
 				s = *x
-			default:
-				return errors.New(`unhandled byte type`)
-			}
-		case *json.RawMessage:
-			switch s := dest[i].(type) {
 			case *json.RawMessage:
 				*s = *x
 			case json.RawMessage:
 				s = *x
 			default:
-				return errors.New(`unhandled json.RawMessage type`)
+				return errors.New(`unhandled byte type`)
 			}
 		default:
 			return errors.New(`unhandled sql.Null<type>`)
