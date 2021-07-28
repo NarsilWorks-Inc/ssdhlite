@@ -7,6 +7,8 @@ import (
 	"log"
 	"reflect"
 	"time"
+
+	ssd "github.com/shopspring/decimal"
 )
 
 func copyScannedToDest(dest, src []interface{}) error {
@@ -98,6 +100,15 @@ func copyScannedToDest(dest, src []interface{}) error {
 			default:
 				return errors.New(`unhandled byte type`)
 			}
+		case *ssd.NullDecimal:
+			switch s := dest[i].(type) {
+			case *ssd.Decimal:
+				*s = x.Decimal
+			case **ssd.Decimal:
+				*s = &x.Decimal
+			default:
+				return errors.New(`unhandled shopspring.NullDecimal type`)
+			}
 		default:
 			return errors.New(`unhandled sql.Null<type>`)
 		}
@@ -137,6 +148,8 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 		case []uint8, *[]uint8, *json.RawMessage, json.RawMessage:
 
 			destq[i] = &[]byte{}
+		case *ssd.Decimal, **ssd.Decimal:
+			destq[i] = &ssd.NullDecimal{}
 		default:
 			log.Fatal("Unhandled data type: " + reflect.TypeOf(x).Name())
 		}

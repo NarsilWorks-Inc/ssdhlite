@@ -7,6 +7,8 @@ import (
 	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
+	ssd "github.com/shopspring/decimal"
+
 	//dhl "eaglebush/datahelperlite"
 
 	cfg "github.com/eaglebush/config"
@@ -558,4 +560,107 @@ func TestGetBytes(t *testing.T) {
 
 		t.Log(err.Error())
 	}
+}
+
+func TestGetDecimal(t *testing.T) {
+	var (
+		err error
+		c   dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`OFFICE`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	type input1 struct {
+		refid   string
+		dcc     ssd.Decimal
+		catched int
+	}
+
+	var i1 input1
+
+	err = c.QueryRow(`SELECT ReferenceID,
+							 Catched,
+							 DimensionCaseCount
+						FROM tdrShipment
+						WHERE ShipmentKey = @p1;`, 1053811).
+		Scan(&i1.refid, &i1.catched, &i1.dcc)
+
+	if err != nil {
+
+		if err != dhl.ErrNoRows {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
+		t.Log(err.Error())
+	}
+
+	t.Logf("%s %d %s", i1.refid, i1.catched, i1.dcc)
+}
+
+func TestExecDecimal(t *testing.T) {
+	var (
+		err error
+		c   dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`OFFICE`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	var (
+		dcc ssd.Decimal
+	)
+
+	dcc, _ = ssd.NewFromString("10.12345678")
+
+	affr, err := c.Exec(`UPDATE tdrShipment
+							SET UserFld2 = @p1,
+								DimensionCaseCount = @p2
+						WHERE ShipmentKey = @p3;`, "Updated!", dcc, 1053811)
+
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	t.Logf("Affected rows %d", affr)
 }
