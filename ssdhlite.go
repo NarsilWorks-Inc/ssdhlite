@@ -742,3 +742,19 @@ func (h *SQLServerHelper) Escape(fv string) string {
 
 	return strings.ReplaceAll(fv, senc, sesc+sesc)
 }
+
+// DatabaseVersion returns database version
+func (h *SQLServerHelper) DatabaseVersion() string {
+
+	var (
+		err     error
+		version string
+	)
+
+	err = h.QueryRow(`SELECT @@VERSION;`).Scan(&version)
+	if err != nil {
+		version = err.Error()
+	}
+
+	return version
+}
