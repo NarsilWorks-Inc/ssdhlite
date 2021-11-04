@@ -145,7 +145,7 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 		case *time.Time, **time.Time:
 
 			destq[i] = &sql.NullTime{}
-		case []uint8, *[]uint8, *json.RawMessage, json.RawMessage:
+		case []uint8, *[]uint8, **[]uint8, *json.RawMessage, json.RawMessage:
 
 			destq[i] = &[]byte{}
 		case *ssd.Decimal, **ssd.Decimal:
