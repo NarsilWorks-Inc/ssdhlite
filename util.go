@@ -97,6 +97,8 @@ func copyScannedToDest(dest, src []interface{}) error {
 				*s = *x
 			case json.RawMessage:
 				s = *x
+			case **[]uint8:
+				*s = x
 			default:
 				return errors.New(`unhandled byte type`)
 			}
