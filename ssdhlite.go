@@ -154,6 +154,8 @@ func (h *SQLServerHelper) Commit() error {
 			if !errors.Is(err, sql.ErrTxDone) {
 				return err
 			}
+
+			h.tx = nil
 			return err
 		}
 	}
@@ -202,6 +204,8 @@ func (h *SQLServerHelper) Rollback() error {
 			if !errors.Is(err, sql.ErrTxDone) {
 				return err
 			}
+
+			h.tx = nil
 			return err
 		}
 	}
