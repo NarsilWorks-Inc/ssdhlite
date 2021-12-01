@@ -2,6 +2,7 @@ package ssdhlite
 
 import (
 	"context"
+	"database/sql"
 	dsql "database/sql"
 	"errors"
 	"fmt"
@@ -150,6 +151,9 @@ func (h *SQLServerHelper) Commit() error {
 
 	if h.trcnt == 1 {
 		if err := h.tx.Commit(); err != nil {
+			if !errors.Is(err, sql.ErrTxDone) {
+				return err
+			}
 			return err
 		}
 	}
@@ -195,6 +199,9 @@ func (h *SQLServerHelper) Rollback() error {
 
 	if h.trcnt == 1 {
 		if err := h.tx.Rollback(); err != nil {
+			if !errors.Is(err, sql.ErrTxDone) {
+				return err
+			}
 			return err
 		}
 	}
