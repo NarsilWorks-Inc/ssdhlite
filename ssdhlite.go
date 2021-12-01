@@ -5,6 +5,7 @@ import (
 	dsql "database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -117,11 +118,15 @@ func (h *SQLServerHelper) Begin() error {
 	defer h.closemu.Unlock()
 	h.trcnt++
 
+	log.Printf("Begin TranCount: %d", h.trcnt)
+
 	return nil
 }
 
 // Commit a transaction
 func (h *SQLServerHelper) Commit() error {
+
+	log.Printf("Commit TranCount: %d", h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -163,6 +168,8 @@ func (h *SQLServerHelper) Commit() error {
 
 // Rollback a transaction
 func (h *SQLServerHelper) Rollback() error {
+
+	log.Printf("Rollback TranCount: %d", h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
