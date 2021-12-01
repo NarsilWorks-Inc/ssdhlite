@@ -12,6 +12,7 @@ import (
 	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
+	"github.com/segmentio/ksuid"
 
 	cfg "github.com/eaglebush/config"
 	std "github.com/eaglebush/stdutil"
@@ -19,15 +20,16 @@ import (
 
 // SQLServerHelper - a struct derived from datahelperlite
 type SQLServerHelper struct {
-	db       *dsql.DB
-	tx       *dsql.Tx
-	dbi      *cfg.DatabaseInfo
-	ctx      context.Context
-	rws      dhl.Rows
-	rw       dhl.Row
-	trcnt    int
-	reusecnt int
-	closemu  sync.RWMutex
+	db         *dsql.DB
+	tx         *dsql.Tx
+	dbi        *cfg.DatabaseInfo
+	ctx        context.Context
+	rws        dhl.Rows
+	rw         dhl.Row
+	trcnt      int
+	reusecnt   int
+	closemu    sync.RWMutex
+	instanceID string
 }
 
 func init() {
@@ -62,6 +64,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	}
 
 	h.closemu.Unlock()
+	h.instanceID = ksuid.New().String()
 
 	return nil
 }
@@ -118,7 +121,7 @@ func (h *SQLServerHelper) Begin() error {
 	defer h.closemu.Unlock()
 	h.trcnt++
 
-	log.Printf("Begin TranCount: %d", h.trcnt)
+	log.Printf("Begin TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	return nil
 }
@@ -126,7 +129,7 @@ func (h *SQLServerHelper) Begin() error {
 // Commit a transaction
 func (h *SQLServerHelper) Commit() error {
 
-	log.Printf("Commit TranCount: %d", h.trcnt)
+	log.Printf("Commit TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -157,7 +160,7 @@ func (h *SQLServerHelper) Commit() error {
 	if h.trcnt > 0 {
 		h.trcnt--
 
-		log.Printf("Commit TranCount Deducted: %d", h.trcnt)
+		log.Printf("Commit TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
@@ -171,7 +174,7 @@ func (h *SQLServerHelper) Commit() error {
 // Rollback a transaction
 func (h *SQLServerHelper) Rollback() error {
 
-	log.Printf("Rollback TranCount: %d", h.trcnt)
+	log.Printf("Rollback TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -202,7 +205,7 @@ func (h *SQLServerHelper) Rollback() error {
 	if h.trcnt > 0 {
 		h.trcnt--
 
-		log.Printf("Rollback TranCount Deducted: %d", h.trcnt)
+		log.Printf("Rollback TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
