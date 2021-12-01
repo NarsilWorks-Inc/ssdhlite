@@ -155,6 +155,9 @@ func (h *SQLServerHelper) Commit() error {
 	h.closemu.Lock()
 	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
+
+		log.Printf("Commit TranCount Deducted: %d", h.trcnt)
+
 		h.trcnt--
 	}
 
@@ -199,6 +202,8 @@ func (h *SQLServerHelper) Rollback() error {
 	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
 		h.trcnt--
+
+		log.Printf("Rollback TranCount Deducted: %d", h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
