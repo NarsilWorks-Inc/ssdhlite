@@ -155,10 +155,9 @@ func (h *SQLServerHelper) Commit() error {
 	h.closemu.Lock()
 	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
+		h.trcnt--
 
 		log.Printf("Commit TranCount Deducted: %d", h.trcnt)
-
-		h.trcnt--
 	}
 
 	// if trancount is zero, we can set the tx to nil
