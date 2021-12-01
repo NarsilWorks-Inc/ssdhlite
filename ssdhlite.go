@@ -37,6 +37,10 @@ func init() {
 	dhl.SetErrNoRows(dsql.ErrNoRows)
 }
 
+func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
+	return &SQLServerHelper{}
+}
+
 // Open a new connection
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
 
