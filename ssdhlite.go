@@ -6,7 +6,6 @@ import (
 	dsql "database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -122,7 +121,7 @@ func (h *SQLServerHelper) Begin() error {
 	defer h.closemu.Unlock()
 	h.trcnt++
 
-	log.Printf("Begin TranCount (%s): %d", h.instanceID, h.trcnt)
+	//log.Printf("Begin TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	return nil
 }
@@ -130,7 +129,7 @@ func (h *SQLServerHelper) Begin() error {
 // Commit a transaction
 func (h *SQLServerHelper) Commit() error {
 
-	log.Printf("Commit TranCount (%s): %d", h.instanceID, h.trcnt)
+	//log.Printf("Commit TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -166,7 +165,7 @@ func (h *SQLServerHelper) Commit() error {
 	if h.trcnt > 0 {
 		h.trcnt--
 
-		log.Printf("Commit TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
+		//log.Printf("Commit TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
@@ -180,7 +179,7 @@ func (h *SQLServerHelper) Commit() error {
 // Rollback a transaction
 func (h *SQLServerHelper) Rollback() error {
 
-	log.Printf("Rollback TranCount (%s): %d", h.instanceID, h.trcnt)
+	//log.Printf("Rollback TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -216,7 +215,7 @@ func (h *SQLServerHelper) Rollback() error {
 	if h.trcnt > 0 {
 		h.trcnt--
 
-		log.Printf("Rollback TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
+		//log.Printf("Rollback TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
