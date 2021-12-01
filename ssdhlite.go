@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
@@ -25,6 +26,7 @@ type SQLServerHelper struct {
 	rw       dhl.Row
 	trcnt    int
 	reusecnt int
+	closemu  sync.RWMutex
 }
 
 func init() {
@@ -51,10 +53,14 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 		if err != nil {
 			return err
 		}
+		h.closemu.Lock()
 		h.reusecnt = 0
 	} else {
+		h.closemu.Lock()
 		h.reusecnt++
 	}
+
+	h.closemu.Unlock()
 
 	return nil
 }
@@ -69,6 +75,9 @@ func (h *SQLServerHelper) Close() error {
 	// if reused, closing will be prevented
 	// until reusing is zero
 	if h.reusecnt > 0 {
+		h.closemu.Lock()
+		defer h.closemu.Unlock()
+
 		h.reusecnt--
 		return nil
 	}
@@ -78,6 +87,8 @@ func (h *SQLServerHelper) Close() error {
 		return err
 	}
 
+	h.closemu.Lock()
+	defer h.closemu.Unlock()
 	h.trcnt = 0
 	h.db = nil
 
@@ -102,6 +113,8 @@ func (h *SQLServerHelper) Begin() error {
 		}
 	}
 
+	h.closemu.Lock()
+	defer h.closemu.Unlock()
 	h.trcnt++
 
 	return nil
@@ -112,6 +125,9 @@ func (h *SQLServerHelper) Commit() error {
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
+		h.closemu.Lock()
+		defer h.closemu.Unlock()
+
 		h.trcnt-- // deduct from transaction count
 		return nil
 	}
@@ -131,6 +147,8 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	// decrement transaction
+	h.closemu.Lock()
+	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
 		h.trcnt--
 	}
@@ -148,6 +166,9 @@ func (h *SQLServerHelper) Rollback() error {
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
+		h.closemu.Lock()
+		defer h.closemu.Unlock()
+
 		h.trcnt-- // deduct from transaction count
 		return nil
 	}
@@ -167,6 +188,8 @@ func (h *SQLServerHelper) Rollback() error {
 	}
 
 	// decrement transaction
+	h.closemu.Lock()
+	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
 		h.trcnt--
 	}
