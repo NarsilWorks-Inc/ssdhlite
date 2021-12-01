@@ -80,10 +80,14 @@ func (h *SQLServerHelper) Close() error {
 	// until reusing is zero
 	if h.reusecnt > 0 {
 		h.closemu.Lock()
-		defer h.closemu.Unlock()
-
 		h.reusecnt--
+		h.closemu.Unlock()
 		return nil
+	}
+
+	// check if transaction exists
+	if h.tx != nil {
+		h.Rollback()
 	}
 
 	if err := h.db.Close(); err != nil {
@@ -93,6 +97,7 @@ func (h *SQLServerHelper) Close() error {
 
 	h.closemu.Lock()
 	defer h.closemu.Unlock()
+
 	h.trcnt = 0
 	h.db = nil
 
@@ -121,15 +126,11 @@ func (h *SQLServerHelper) Begin() error {
 	defer h.closemu.Unlock()
 	h.trcnt++
 
-	//log.Printf("Begin TranCount (%s): %d", h.instanceID, h.trcnt)
-
 	return nil
 }
 
 // Commit a transaction
 func (h *SQLServerHelper) Commit() error {
-
-	//log.Printf("Commit TranCount (%s): %d", h.instanceID, h.trcnt)
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -164,8 +165,6 @@ func (h *SQLServerHelper) Commit() error {
 	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
 		h.trcnt--
-
-		//log.Printf("Commit TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
@@ -214,8 +213,6 @@ func (h *SQLServerHelper) Rollback() error {
 	defer h.closemu.Unlock()
 	if h.trcnt > 0 {
 		h.trcnt--
-
-		//log.Printf("Rollback TranCount Deducted (%s): %d", h.instanceID, h.trcnt)
 	}
 
 	// if trancount is zero, we can set the tx to nil
