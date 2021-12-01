@@ -37,6 +37,7 @@ func init() {
 	dhl.SetErrNoRows(dsql.ErrNoRows)
 }
 
+// NewHelper instantiates new helper
 func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 	return &SQLServerHelper{}
 }
