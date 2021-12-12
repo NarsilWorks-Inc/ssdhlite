@@ -3,7 +3,6 @@ package ssdhlite
 import (
 	"context"
 	"database/sql"
-	dsql "database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -20,8 +19,8 @@ import (
 
 // SQLServerHelper - a struct derived from datahelperlite
 type SQLServerHelper struct {
-	db         *dsql.DB
-	tx         *dsql.Tx
+	db         *sql.DB
+	tx         *sql.Tx
 	dbi        *cfg.DatabaseInfo
 	ctx        context.Context
 	rws        dhl.Rows
@@ -34,7 +33,7 @@ type SQLServerHelper struct {
 
 func init() {
 	dhl.SetHelper(`ssdhlite`, &SQLServerHelper{})
-	dhl.SetErrNoRows(dsql.ErrNoRows)
+	dhl.SetErrNoRows(sql.ErrNoRows)
 }
 
 // NewHelper instantiates new helper
@@ -57,7 +56,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.ctx = ctx
 
 	if h.db == nil {
-		h.db, err = dsql.Open(`sqlserver`, di.ConnectionString)
+		h.db, err = sql.Open(`sqlserver`, di.ConnectionString)
 		if err != nil {
 			return err
 		}
@@ -287,11 +286,11 @@ func (h *SQLServerHelper) Save(name string) error {
 }
 
 // Query from PostgreSQL helper
-func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, error) {
+func (h *SQLServerHelper) Query(query string, args ...interface{}) (dhl.Rows, error) {
 
 	var (
 		err error
-		sqr *dsql.Rows
+		sqr *sql.Rows
 	)
 
 	if h.db == nil {
@@ -299,15 +298,15 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	query = dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 
 	// replace tables meant for interpolation {table} for putting the schema
-	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
+	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
 	if h.tx != nil {
-		sqr, err = h.tx.QueryContext(h.ctx, sql, args...)
+		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, err = h.db.QueryContext(h.ctx, sql, args...)
+		sqr, err = h.db.QueryContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
@@ -324,11 +323,11 @@ func (h *SQLServerHelper) Query(sql string, args ...interface{}) (dhl.Rows, erro
 }
 
 // QueryArray puts the single column result to an output array
-func (h *SQLServerHelper) QueryArray(sql string, out interface{}, args ...interface{}) error {
+func (h *SQLServerHelper) QueryArray(query string, out interface{}, args ...interface{}) error {
 
 	var (
 		err error
-		sqr *dsql.Rows
+		sqr *sql.Rows
 	)
 
 	switch out.(type) {
@@ -343,15 +342,15 @@ func (h *SQLServerHelper) QueryArray(sql string, out interface{}, args ...interf
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	query = dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 
 	// replace tables meant for interpolation {table} for putting the schema
-	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
+	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
 	if h.tx != nil {
-		sqr, err = h.tx.QueryContext(h.ctx, sql, args...)
+		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, err = h.db.QueryContext(h.ctx, sql, args...)
+		sqr, err = h.db.QueryContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
@@ -573,12 +572,12 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 }
 
 // Exec from SQLServerHelper helper
-func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
+func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error) {
 
 	var (
 		err error
 		ra  int64
-		sq  dsql.Result
+		sq  sql.Result
 	)
 
 	if h.db == nil {
@@ -586,14 +585,14 @@ func (h *SQLServerHelper) Exec(sql string, args ...interface{}) (int64, error) {
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	query = dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 
-	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
+	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
 	if h.tx != nil {
-		sq, err = h.tx.ExecContext(h.ctx, sql, args...)
+		sq, err = h.tx.ExecContext(h.ctx, query, args...)
 	} else {
-		sq, err = h.db.ExecContext(h.ctx, sql, args...)
+		sq, err = h.db.ExecContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
@@ -809,4 +808,32 @@ func (h *SQLServerHelper) DatabaseVersion() string {
 	}
 
 	return version
+}
+
+// Now gets the current server date
+func (h *SQLServerHelper) Now() *time.Time {
+
+	var tm *time.Time
+
+	err := h.QueryRow(`SELECT GETDATE();`).Scan(&tm)
+	if err != nil {
+		tn := time.Now()
+		return &tn
+	}
+
+	return tm
+}
+
+// NowUTC gets the current server date in UTC
+func (h *SQLServerHelper) NowUTC() *time.Time {
+
+	var tm *time.Time
+
+	err := h.QueryRow(`SELECT GETUTCDATE();`).Scan(&tm)
+	if err != nil {
+		tn := time.Now().UTC()
+		return &tn
+	}
+
+	return tm
 }
