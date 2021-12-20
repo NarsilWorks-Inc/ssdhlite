@@ -1,4 +1,4 @@
-module ssdhlite
+module github.com/NarsilWorks-Inc/ssdhlite
 
 go 1.17
 
