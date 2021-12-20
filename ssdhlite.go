@@ -27,6 +27,7 @@ type SQLServerHelper struct {
 	rw         dhl.Row
 	trcnt      int
 	reusecnt   int
+	trnmap     map[string]string
 	closemu    sync.RWMutex
 	instanceID string
 }
@@ -38,7 +39,9 @@ func init() {
 
 // NewHelper instantiates new helper
 func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
-	return &SQLServerHelper{}
+	return &SQLServerHelper{
+		trnmap: make(map[string]string),
+	}
 }
 
 // Open a new connection
@@ -127,14 +130,42 @@ func (h *SQLServerHelper) Begin() error {
 	}
 
 	h.closemu.Lock()
-	defer h.closemu.Unlock()
 	h.trcnt++
+	h.closemu.Unlock()
 
 	return nil
 }
 
-// Commit a transaction
-func (h *SQLServerHelper) Commit() error {
+// BeginDR begins a transaction with a transaction id
+// also stored in to a local map or list. It will
+// be useful if used in a deferred rollback setup
+func (h *SQLServerHelper) BeginDR() (string, error) {
+
+	tranid := ksuid.New().String()
+	h.trnmap[tranid] = `OK`
+
+	return tranid, h.Begin()
+}
+
+// Commit a transaction. The tranid argument is supplied
+// using the BeginDR() function.
+func (h *SQLServerHelper) Commit(tranid ...string) error {
+
+	// tranid is used to identify the current transaction
+	// if the coding style used is deferring rollback
+	// after Begin() is called, this would solve the
+	// problem of rolled back transaction in reusablity mode
+
+	// If the tranid is not found on the map, it will
+	// not take any action
+	if len(tranid) > 0 {
+		if _, ok := h.trnmap[tranid[0]]; !ok {
+			return nil
+		}
+
+		// the key is deleted after calling Commit
+		defer delete(h.trnmap, tranid[0])
+	}
 
 	// exit if the connection was just reused
 	if h.trcnt > 1 {
@@ -179,8 +210,25 @@ func (h *SQLServerHelper) Commit() error {
 	return nil
 }
 
-// Rollback a transaction
-func (h *SQLServerHelper) Rollback() error {
+// Rollback a transaction. The tranid argument is supplied
+// using the BeginDR() function.
+func (h *SQLServerHelper) Rollback(tranid ...string) error {
+
+	// tranid is used to identify the current transaction
+	// if the coding style used is deferring rollback
+	// after Begin() is called, this would solve the
+	// problem of rolled back transaction in reusablity mode
+
+	// If the tranid is not found on the map, it will
+	// not take any action
+	if len(tranid) > 0 {
+		if _, ok := h.trnmap[tranid[0]]; !ok {
+			return nil
+		}
+
+		// the tranid is deleted when Rollback() is called
+		defer delete(h.trnmap, tranid[0])
+	}
 
 	//log.Printf("Rollback TranCount (%s): %d", h.instanceID, h.trcnt)
 

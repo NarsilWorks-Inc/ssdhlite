@@ -5,18 +5,18 @@ go 1.17
 require github.com/denisenkom/go-mssqldb v0.11.0
 
 require (
-	github.com/NarsilWorks-Inc/datahelperlite v0.0.0-20211212020414-a032bdb5cf25
-	github.com/eaglebush/config v0.0.0-20211210110519-ae28f84f4951
-	github.com/eaglebush/stdutil v0.0.0-20211203084811-ba0562a409d8
+	github.com/NarsilWorks-Inc/datahelperlite v0.0.0-20211220094804-c63b4cfa3642
+	github.com/eaglebush/config v0.0.0-20211214062021-ea82cb91ecdf
+	github.com/eaglebush/stdutil v0.0.0-20211217093838-c412e0e0b9f5
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/segmentio/ksuid v1.0.4
 	github.com/shopspring/decimal v1.3.1
-	golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad // indirect
+	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3 // indirect
 )
 
 require (
 	github.com/gbrlsnchs/jwt/v3 v3.0.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
-	github.com/magefile/mage v1.9.0 // indirect
-	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
+	github.com/magefile/mage v1.12.1 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
