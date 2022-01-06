@@ -5,9 +5,9 @@ go 1.17
 require github.com/denisenkom/go-mssqldb v0.11.0
 
 require (
-	github.com/NarsilWorks-Inc/datahelperlite v0.0.0-20211220094804-c63b4cfa3642
+	github.com/NarsilWorks-Inc/datahelperlite v0.0.0-20220106120340-18d3aaf2e9f6
 	github.com/eaglebush/config v0.0.0-20211214062021-ea82cb91ecdf
-	github.com/eaglebush/stdutil v0.0.0-20211217093838-c412e0e0b9f5
+	github.com/eaglebush/stdutil v0.0.0-20211226043655-9ba289c09c71
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
 	github.com/segmentio/ksuid v1.0.4
 	github.com/shopspring/decimal v1.3.1

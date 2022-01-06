@@ -2,6 +2,8 @@ package ssdhlite
 
 import (
 	"database/sql"
+
+	"github.com/NarsilWorks-Inc/datahelperlite"
 )
 
 // SQLServerRows struct
@@ -55,6 +57,26 @@ func (ss SQLServerRows) Scan(dest ...interface{}) error {
 // Values from the rows
 func (ss SQLServerRows) Values() ([]interface{}, error) {
 	return nil, nil
+}
+
+// Columns from the rows
+func (ss SQLServerRows) Columns() ([]datahelperlite.Column, error) {
+
+	cts, err := ss.sqr.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+
+	ctps := make([]datahelperlite.Column, len(cts))
+	for i, ct := range cts {
+		ctps[i] = Column{
+			name:    ct.Name(),
+			dbtname: ct.DatabaseTypeName(),
+			scntyp:  ct.ScanType(),
+		}
+	}
+
+	return ctps, nil
 }
 
 // RawValues from the rows
