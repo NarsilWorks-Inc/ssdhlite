@@ -54,11 +54,11 @@ func TestGetRows(t *testing.T) {
 	}
 	defer rows.Close()
 
-	var (
-		emailkey                            int64
-		subject, format, sender, senderaddr string
-		datequeued                          time.Time
-	)
+	// var (
+	// 	emailkey                            int64
+	// 	subject, format, sender, senderaddr string
+	// 	datequeued                          time.Time
+	// )
 
 	cols, err := rows.Columns()
 	if err != nil {
@@ -71,14 +71,22 @@ func TestGetRows(t *testing.T) {
 		t.Log(col.Name(), col.DatabaseTypeName(), col.ScanType())
 	}
 
+	ifrows := make([]interface{}, 6)
+	brows := make([]string, 6)
+
+	for i := range ifrows {
+		ifrows[i] = &brows[i]
+	}
+
 	for rows.Next() {
-		err = rows.Scan(
-			&emailkey,
-			&subject,
-			&format,
-			&sender,
-			&senderaddr,
-			&datequeued)
+		// err = rows.Scan(
+		// 	&emailkey,
+		// 	&subject,
+		// 	&format,
+		// 	&sender,
+		// 	&senderaddr,
+		// 	&datequeued)
+		err = rows.Scan(ifrows...)
 
 		if err != nil {
 			t.Log(err.Error())
@@ -89,8 +97,11 @@ func TestGetRows(t *testing.T) {
 		// t.Logf("EmailKey: %d, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
 		// 	emailkey, subject, format, sender, senderaddr, datequeued.Format(`2006-01-02T15:04:05.000Z`))
 
-		t.Logf("EmailKey: %d, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
-			emailkey, subject, format, sender, senderaddr, datequeued)
+		// t.Logf("EmailKey: %d, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
+		// 	emailkey, subject, format, sender, senderaddr, datequeued)
+
+		t.Logf("EmailKey: %s, Subject: %s, Format: %s, Sender: %s, SenderAddress: %s, Date Queued: %s",
+			brows[0], brows[1], brows[2], brows[3], brows[4], brows[5])
 	}
 
 	if rows.Err() != nil {
