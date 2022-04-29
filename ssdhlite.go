@@ -77,6 +77,10 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 			h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
 		}
 
+		if di.MaxConnectionIdleTime != nil {
+			h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
+		}
+
 		h.closemu.Lock()
 		h.reusecnt = 0
 	} else {
