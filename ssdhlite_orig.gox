@@ -30,7 +30,6 @@ type SQLServerHelper struct {
 	trnmap     map[string]string
 	closemu    sync.RWMutex
 	instanceID string
-	conn       *sql.Conn
 }
 
 func init() {
@@ -59,7 +58,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.dbi = di
 	h.ctx = ctx
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 
 		h.db, err = sql.Open(`sqlserver`, di.ConnectionString)
 		if err != nil {
@@ -82,11 +81,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 			h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
 		}
 
-		h.conn, err = h.db.Conn(h.ctx)
-		if err != nil {
-			return err
-		}
-
 		h.closemu.Lock()
 		h.reusecnt = 0
 	} else {
@@ -103,7 +97,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 // Close the helper
 func (h *SQLServerHelper) Close() error {
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -121,9 +115,8 @@ func (h *SQLServerHelper) Close() error {
 		h.Rollback()
 	}
 
-	if err := h.conn.Close(); err != nil {
+	if err := h.db.Close(); err != nil {
 		h.db = nil
-		h.conn = nil
 		return err
 	}
 
@@ -132,7 +125,6 @@ func (h *SQLServerHelper) Close() error {
 
 	h.trcnt = 0
 	h.db = nil
-	h.conn = nil
 
 	return nil
 }
@@ -144,12 +136,12 @@ func (h *SQLServerHelper) Begin() error {
 		err error
 	)
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
 	if h.tx == nil {
-		h.tx, err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
+		h.tx, err = h.db.Begin()
 		if err != nil {
 			return err
 		}
@@ -202,7 +194,7 @@ func (h *SQLServerHelper) Commit(tranid ...string) error {
 		return nil
 	}
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -267,7 +259,7 @@ func (h *SQLServerHelper) Rollback(tranid ...string) error {
 		return nil
 	}
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -306,7 +298,7 @@ func (h *SQLServerHelper) Mark(name string) error {
 
 	var err error
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -325,7 +317,7 @@ func (h *SQLServerHelper) Mark(name string) error {
 func (h *SQLServerHelper) Discard(name string) error {
 	var err error
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -344,7 +336,7 @@ func (h *SQLServerHelper) Discard(name string) error {
 func (h *SQLServerHelper) Save(name string) error {
 	var err error
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -367,7 +359,7 @@ func (h *SQLServerHelper) Query(query string, args ...interface{}) (dhl.Rows, er
 		sqr *sql.Rows
 	)
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return nil, dhl.ErrNoConn
 	}
 
@@ -380,7 +372,7 @@ func (h *SQLServerHelper) Query(query string, args ...interface{}) (dhl.Rows, er
 	if h.tx != nil {
 		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, err = h.conn.QueryContext(h.ctx, query, args...)
+		sqr, err = h.db.QueryContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
@@ -411,7 +403,7 @@ func (h *SQLServerHelper) QueryArray(query string, out interface{}, args ...inte
 		return dhl.ErrArrayTypeNotSupported
 	}
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -424,7 +416,7 @@ func (h *SQLServerHelper) QueryArray(query string, out interface{}, args ...inte
 	if h.tx != nil {
 		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, err = h.conn.QueryContext(h.ctx, query, args...)
+		sqr, err = h.db.QueryContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
@@ -628,7 +620,7 @@ func (h *SQLServerHelper) QueryArray(query string, out interface{}, args ...inte
 // QueryRow from PostgreSQL helper
 func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return nil
 	}
 
@@ -641,7 +633,7 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 		return h.rw
 	}
 
-	h.rw = NewSQLServerRow(h.conn.QueryRowContext(h.ctx, sql, args...))
+	h.rw = NewSQLServerRow(h.db.QueryRowContext(h.ctx, sql, args...))
 	return h.rw
 }
 
@@ -654,7 +646,7 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 		sq  sql.Result
 	)
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return 0, dhl.ErrNoConn
 	}
 
@@ -666,7 +658,7 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 	if h.tx != nil {
 		sq, err = h.tx.ExecContext(h.ctx, query)
 	} else {
-		sq, err = h.conn.ExecContext(h.ctx, query)
+		sq, err = h.db.ExecContext(h.ctx, query)
 	}
 
 	if err != nil {
@@ -686,7 +678,7 @@ func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, 
 		sql string
 	)
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return false, nil
 	}
 
@@ -709,7 +701,7 @@ func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, 
 		return cnt == 1, nil
 	}
 
-	err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+	err = h.db.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
 	if errors.Is(err, dhl.ErrNoRows) {
 		return false, nil
 	}
@@ -792,7 +784,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 // VerifyWithin a set of validation expression against the underlying database table
 func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpression) (Valid bool, QueryOK bool, Message string) {
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil {
 		return false, false, dhl.ErrNoConn.Error()
 	}
 
