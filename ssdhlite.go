@@ -637,10 +637,23 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
-	if h.tx != nil {
-		sq, err = h.tx.ExecContext(h.ctx, query, args...)
+	if len(args) == 0 {
+		// Caveat for local temporary tables
+		//	Due to protocol limitations, temporary tables will only be allocated
+		//	on the connection as a result of executing a query with zero parameters.
+		//	The following query will, due to the use of a parameter,
+		// 	execute in its own session, and #mytemp will be de-allocated right away:
+		if h.tx != nil {
+			sq, err = h.tx.ExecContext(h.ctx, query)
+		} else {
+			sq, err = h.db.ExecContext(h.ctx, query)
+		}
 	} else {
-		sq, err = h.db.ExecContext(h.ctx, query, args...)
+		if h.tx != nil {
+			sq, err = h.tx.ExecContext(h.ctx, query, args...)
+		} else {
+			sq, err = h.db.ExecContext(h.ctx, query, args...)
+		}
 	}
 
 	if err != nil {
