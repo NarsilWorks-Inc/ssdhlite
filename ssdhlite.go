@@ -664,9 +664,9 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
 	if h.tx != nil {
-		sq, err = h.tx.ExecContext(h.ctx, query)
+		sq, err = h.tx.ExecContext(h.ctx, query, args...)
 	} else {
-		sq, err = h.conn.ExecContext(h.ctx, query)
+		sq, err = h.conn.ExecContext(h.ctx, query, args...)
 	}
 
 	if err != nil {
