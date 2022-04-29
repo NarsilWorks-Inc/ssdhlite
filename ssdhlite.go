@@ -59,10 +59,24 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.ctx = ctx
 
 	if h.db == nil {
+
 		h.db, err = sql.Open(`sqlserver`, di.ConnectionString)
 		if err != nil {
 			return err
 		}
+
+		if di.MaxOpenConnection != nil {
+			h.db.SetMaxOpenConns(*di.MaxOpenConnection)
+		}
+
+		if di.MaxIdleConnection != nil {
+			h.db.SetMaxIdleConns(*di.MaxIdleConnection)
+		}
+
+		if di.MaxConnectionLifetime != nil {
+			h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
+		}
+
 		h.closemu.Lock()
 		h.reusecnt = 0
 	} else {
@@ -637,23 +651,10 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
-	if len(args) == 0 {
-		// Caveat for local temporary tables
-		//	Due to protocol limitations, temporary tables will only be allocated
-		//	on the connection as a result of executing a query with zero parameters.
-		//	The following query will, due to the use of a parameter,
-		// 	execute in its own session, and #mytemp will be de-allocated right away:
-		if h.tx != nil {
-			sq, err = h.tx.ExecContext(h.ctx, query)
-		} else {
-			sq, err = h.db.ExecContext(h.ctx, query)
-		}
+	if h.tx != nil {
+		sq, err = h.tx.ExecContext(h.ctx, query)
 	} else {
-		if h.tx != nil {
-			sq, err = h.tx.ExecContext(h.ctx, query, args...)
-		} else {
-			sq, err = h.db.ExecContext(h.ctx, query, args...)
-		}
+		sq, err = h.db.ExecContext(h.ctx, query)
 	}
 
 	if err != nil {
