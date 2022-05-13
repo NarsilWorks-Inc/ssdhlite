@@ -103,7 +103,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 // Close the helper
 func (h *SQLServerHelper) Close() error {
 
-	if h.db == nil || h.conn == nil {
+	if h.db == nil && h.conn == nil {
 		return dhl.ErrNoConn
 	}
 
@@ -122,6 +122,12 @@ func (h *SQLServerHelper) Close() error {
 	}
 
 	if err := h.conn.Close(); err != nil {
+		h.db = nil
+		h.conn = nil
+		return err
+	}
+
+	if err := h.db.Close(); err != nil {
 		h.db = nil
 		h.conn = nil
 		return err

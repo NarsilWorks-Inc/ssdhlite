@@ -25,7 +25,7 @@
         {
             "ID" : "OFFICE",
             "Schema": "public",
-            "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@THANOS?database=QA_APPSDB&connection+timeout=30",
+            "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@THANOS?database=NOTIFICATIONDB&connection+timeout=30",
             "DriverName" : "sqlserver",
             "InterpolateTables": true,
             "ParameterPlaceholder": "@p",
