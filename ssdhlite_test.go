@@ -39,14 +39,19 @@ func TestGetRows(t *testing.T) {
 		return
 	}
 
-	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`OFFICE`)); err != nil {
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`DEFAULT`)); err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
 	defer c.Close()
 
-	rows, err := c.Query(`SELECT TOP 10 EmailKey, Subject, Format, SenderName, SenderAddress, DateQueued FROM tnfEmailSent;`)
+	str := "Administrator"
+
+	rows, err := c.Query(`SELECT TOP 10 EmailKey, Subject, Format,
+								SenderName, SenderAddress, DateQueued
+						 FROM tnfEmailSent
+						 WHERE SenderName = ?;`, dhl.VarChar(str))
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()

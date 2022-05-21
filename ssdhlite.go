@@ -11,6 +11,7 @@ import (
 	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
+	mssql "github.com/denisenkom/go-mssqldb"
 	"github.com/segmentio/ksuid"
 
 	cfg "github.com/eaglebush/config"
@@ -383,6 +384,8 @@ func (h *SQLServerHelper) Query(query string, args ...interface{}) (dhl.Rows, er
 	// replace tables meant for interpolation {table} for putting the schema
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
 
+	args = refineParameters(args...)
+
 	if h.tx != nil {
 		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
@@ -426,6 +429,8 @@ func (h *SQLServerHelper) QueryArray(query string, out interface{}, args ...inte
 
 	// replace tables meant for interpolation {table} for putting the schema
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
+
+	args = refineParameters(args...)
 
 	if h.tx != nil {
 		sqr, err = h.tx.QueryContext(h.ctx, query, args...)
@@ -641,6 +646,7 @@ func (h *SQLServerHelper) QueryRow(sql string, args ...interface{}) dhl.Row {
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sql = dhl.ReplaceQueryParamMarker(sql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	sql = dhl.InterpolateTable(sql, h.dbi.Schema)
+	args = refineParameters(args...)
 
 	if h.tx != nil {
 		h.rw = NewSQLServerRow(h.tx.QueryRowContext(h.ctx, sql, args...))
@@ -666,8 +672,8 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	query = dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-
 	query = dhl.InterpolateTable(query, h.dbi.Schema)
+	args = refineParameters(args...)
 
 	if h.tx != nil {
 		sq, err = h.tx.ExecContext(h.ctx, query, args...)
@@ -699,6 +705,7 @@ func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, 
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sqlwparams = dhl.ReplaceQueryParamMarker(sqlwparams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	sqlwparams = dhl.InterpolateTable(sqlwparams, h.dbi.Schema)
+	args = refineParameters(args...)
 
 	sql = `SELECT TOP 1 1 FROM ` + sqlwparams + `;`
 
@@ -841,6 +848,8 @@ func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpr
 		err    error
 	)
 
+	args = refineParameters(args...)
+
 	sql = `SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM ` + tableNameWithParameters + `) = 1 THEN 1 ELSE 0 END AS BIT);`
 	err = h.QueryRow(sql, args...).Scan(&exists)
 	if err != nil {
@@ -916,4 +925,23 @@ func (h *SQLServerHelper) NowUTC() *time.Time {
 	}
 
 	return tm
+}
+
+// refineParameters sets the built-in type of the datahelper-specified parameter type
+// to mssql parameter type. The default type for strings is nvarchar
+func refineParameters(args ...interface{}) []interface{} {
+	for i, arg := range args {
+		switch t := arg.(type) {
+		case dhl.VarChar:
+			args[i] = mssql.VarChar(t)
+		case dhl.NVarCharMax:
+			args[i] = mssql.NVarCharMax(t)
+		case dhl.VarCharMax:
+			args[i] = mssql.VarCharMax(t)
+		default:
+			_ = t
+		}
+	}
+
+	return args
 }
