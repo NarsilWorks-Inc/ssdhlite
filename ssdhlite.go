@@ -15,7 +15,6 @@ import (
 	"github.com/segmentio/ksuid"
 
 	cfg "github.com/eaglebush/config"
-	std "github.com/eaglebush/stdutil"
 )
 
 // SQLServerHelper - a struct derived from datahelperlite
@@ -690,7 +689,7 @@ func (h *SQLServerHelper) Exec(query string, args ...interface{}) (int64, error)
 }
 
 // Exists checks if a record exist
-func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, error) {
+func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (bool, error) {
 
 	var (
 		err error
@@ -703,11 +702,11 @@ func (h *SQLServerHelper) Exists(sqlwparams string, args ...interface{}) (bool, 
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	sqlwparams = dhl.ReplaceQueryParamMarker(sqlwparams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	sqlwparams = dhl.InterpolateTable(sqlwparams, h.dbi.Schema)
+	sqlWithParams = dhl.ReplaceQueryParamMarker(sqlWithParams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	sqlWithParams = dhl.InterpolateTable(sqlWithParams, h.dbi.Schema)
 	args = refineParameters(args...)
 
-	sql = `SELECT TOP 1 1 FROM ` + sqlwparams + `;`
+	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 
 	if h.tx != nil {
 		err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
@@ -803,13 +802,13 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 }
 
 // VerifyWithin a set of validation expression against the underlying database table
-func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpression) (Valid bool, QueryOK bool, Message string) {
+func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpression) (Valid bool, Error error) {
 
 	if h.db == nil || h.conn == nil {
-		return false, false, dhl.ErrNoConn.Error()
+		return false, dhl.ErrNoConn
 	}
 
-	tableNameWithParameters := tablename
+	tableNameWithParameters := tableName
 
 	args := make([]interface{}, len(values))
 	i := 0
@@ -854,12 +853,12 @@ func (h *SQLServerHelper) VerifyWithin(tablename string, values []std.VerifyExpr
 	err = h.QueryRow(sql, args...).Scan(&exists)
 	if err != nil {
 		if !errors.Is(err, dhl.ErrNoRows) {
-			return false, false, err.Error()
+			return false, err
 		}
-		return false, true, ""
+		return false, nil
 	}
 
-	return exists, true, ""
+	return exists, nil
 }
 
 // Escape a field value (fv) from disruption by single quote
