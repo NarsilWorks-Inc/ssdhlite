@@ -88,6 +88,11 @@ func copyScannedToDest(dest, src []interface{}) error {
 					*s = x.Float64
 				case **float64:
 					*s = &x.Float64
+				case *float32:
+					*s = float32(x.Float64)
+				case **float32:
+					xs := float32(x.Float64)
+					*s = &xs
 				default:
 					return errors.New(`unhandled sql.NullFloat64 type`)
 				}
