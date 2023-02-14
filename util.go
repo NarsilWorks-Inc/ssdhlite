@@ -26,6 +26,33 @@ func copyScannedToDest(dest, src []interface{}) error {
 					return errors.New(`unhandled sql.NullString type`)
 				}
 			}
+		case *sql.NullByte:
+			if x.Valid {
+				switch s := dest[i].(type) {
+				case *uint8:
+					*s = x.Byte
+				case **uint8:
+					*s = &x.Byte
+				default:
+					return errors.New(`unhandled sql.NullByte type`)
+				}
+			}
+		case *sql.NullInt16:
+			if x.Valid {
+				switch s := dest[i].(type) {
+				case *int16:
+					*s = x.Int16
+				case **int16:
+					*s = &x.Int16
+				case *uint16:
+					*s = uint16(x.Int16)
+				case **uint16:
+					xs := uint16(x.Int16)
+					*s = &xs
+				default:
+					return errors.New(`unhandled sql.NullInt16 type`)
+				}
+			}
 		case *sql.NullInt32:
 			if x.Valid {
 				switch s := dest[i].(type) {
@@ -140,30 +167,27 @@ func prepareDest(dest []interface{}) (destq []interface{}) {
 	for i, d := range dest {
 		switch x := d.(type) {
 		case *string, **string:
-
 			destq[i] = &sql.NullString{}
-		case *int, *int8, *int16, *int32, *uint, *uint8, *uint16, *uint32,
-			**int, **int8, **int16, **int32, **uint, **uint8, **uint16, **uint32:
-
+		case *int, *int8, *int32, *uint, *uint32,
+			**int, **int8, **int32, **uint, **uint32:
 			destq[i] = &sql.NullInt32{}
+		case *int16, *uint16, **int16, **uint16:
+			destq[i] = &sql.NullInt16{}
 		case *int64, *uint64,
 			**int64, **uint64:
-
 			destq[i] = &sql.NullInt64{}
 		case *float32, *float64, **float32, **float64:
-
 			destq[i] = &sql.NullFloat64{}
 		case *bool, **bool:
-
 			destq[i] = &sql.NullBool{}
 		case *time.Time, **time.Time:
-
 			destq[i] = &sql.NullTime{}
 		case []uint8, *[]uint8, **[]uint8, *json.RawMessage, json.RawMessage:
-
 			destq[i] = &[]byte{}
 		case *ssd.Decimal, **ssd.Decimal:
 			destq[i] = &ssd.NullDecimal{}
+		case *uint8, **uint8:
+			destq[i] = &sql.NullByte{}
 		case interface{}, *interface{}:
 			destq[i] = &sql.RawBytes{}
 		default:
