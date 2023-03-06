@@ -691,3 +691,47 @@ func TestExecDecimal(t *testing.T) {
 
 	t.Logf("Affected rows %d", affr)
 }
+
+func TestExecRowsAffected(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.LoadConfig(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`APPSHUB`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	tranid, _ := c.BeginDR()
+	defer c.Rollback(tranid)
+
+	affr, err = c.Exec(`UPDATE {useraccount}
+						SET activation_code = ?,
+							activation_status='PENDING'
+						WHERE user_key = ?;`, `1bnSiVeH9qBcxXDn5hAhJQocRmP`, 35)
+	if err != nil {
+		t.Fatalf(`%s`, err)
+	}
+
+	c.Commit(tranid)
+
+	t.Logf(`Affected rows %d`, affr)
+}

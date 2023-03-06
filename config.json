@@ -38,6 +38,23 @@
                 "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
                 "NamePlaceHolder": "{SequenceName}"
             }
+        },
+        {
+            "ID" : "APPSHUB",
+            "Schema": "pub",
+            "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@HULK?database=APPSHUB&connection+timeout=30&encrypt=disable&app+name=appshub",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
         }
     ]
 }
