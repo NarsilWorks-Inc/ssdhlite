@@ -8,7 +8,8 @@
         {
             "ID" : "DEFAULT",
             "Schema": "public",
-            "ConnectionString" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
+            "ConnectionStringX" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
+            "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPCORE&connection+timeout=30",
             "DriverName" : "sqlserver",
             "InterpolateTables": true,
             "ParameterPlaceholder": "@p",

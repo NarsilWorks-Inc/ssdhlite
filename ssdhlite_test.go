@@ -7,13 +7,9 @@ import (
 	"time"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite"
-	ssd "github.com/shopspring/decimal"
-
-	//dhl "eaglebush/datahelperlite"
-
-	cfg "github.com/eaglebush/config"
-
 	_ "github.com/denisenkom/go-mssqldb"
+	cfg "github.com/eaglebush/config"
+	ssd "github.com/shopspring/decimal"
 )
 
 func TestGetRows(t *testing.T) {
@@ -24,30 +20,25 @@ func TestGetRows(t *testing.T) {
 	)
 
 	//c = &SQLServerHelper{}
-
 	c, err = dhl.New(nil, `ssdhlite`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
-
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
-
 	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`DEFAULT`)); err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
 	defer c.Close()
-
 	str := "Administrator"
-
 	rows, err := c.Query(`SELECT TOP 10 EmailKey, Subject, Format,
 								SenderName, SenderAddress, DateQueued
 						 FROM tnfEmailSent
@@ -71,14 +62,11 @@ func TestGetRows(t *testing.T) {
 		t.Fail()
 		return
 	}
-
 	for _, col := range cols {
 		t.Log(col.Name(), col.DatabaseTypeName(), col.ScanType())
 	}
-
 	ifrows := make([]interface{}, 6)
 	brows := make([]string, 6)
-
 	for i := range ifrows {
 		ifrows[i] = &brows[i]
 	}
@@ -130,7 +118,7 @@ func TestGetRow(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -246,7 +234,7 @@ func TestWriteTransactions(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -332,7 +320,7 @@ func TestSequence(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -387,7 +375,7 @@ func TestMultipleOpen(t *testing.T) {
 			return
 		}
 
-		cf, err := cfg.LoadConfig(`config.json`)
+		cf, err := cfg.Load(`config.json`)
 		if err != nil {
 			t.Log(err.Error())
 			t.Fail()
@@ -465,7 +453,7 @@ func TestExists(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -492,9 +480,8 @@ func TestExists(t *testing.T) {
 
 func TestQueryArray(t *testing.T) {
 	var (
-		err    error
-		exists bool
-		c      dhl.DataHelperLite
+		err error
+		c   dhl.DataHelperLite
 	)
 
 	//c = &SQLServerHelper{}
@@ -506,7 +493,7 @@ func TestQueryArray(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -524,14 +511,14 @@ func TestQueryArray(t *testing.T) {
 	var arr []string
 
 	//err = c.QueryArray(`SELECT EmailKey FROM tnfEmailSent;`, &arr)
-	err = c.QueryArray(`SELECT EmailKey FROM tnfEmailSent;`, &arr)
+	err = c.QueryArray(`SELECT application_id FROM pub.application;`, &arr)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
 
-	t.Logf("Exists: %t", exists)
+	t.Logf("Array: %v", arr)
 
 }
 
@@ -550,7 +537,7 @@ func TestGetBytes(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -602,7 +589,7 @@ func TestGetDecimal(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -658,7 +645,7 @@ func TestExecDecimal(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -706,7 +693,7 @@ func TestExecRowsAffected(t *testing.T) {
 		return
 	}
 
-	cf, err := cfg.LoadConfig(`config.json`)
+	cf, err := cfg.Load(`config.json`)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()

@@ -12,7 +12,6 @@ import (
 )
 
 func copyScannedToDest(dest, src []interface{}) error {
-
 	for i, d := range src {
 		switch x := d.(type) {
 		case *sql.NullString:
@@ -69,7 +68,6 @@ func copyScannedToDest(dest, src []interface{}) error {
 					return errors.New(`unhandled sql.NullInt32 type`)
 				}
 			}
-
 		case *sql.NullInt64:
 			if x.Valid {
 				switch s := dest[i].(type) {
@@ -159,7 +157,6 @@ func copyScannedToDest(dest, src []interface{}) error {
 			return errors.New(`unhandled sql.Null<type>`)
 		}
 	}
-
 	return nil
 }
 
