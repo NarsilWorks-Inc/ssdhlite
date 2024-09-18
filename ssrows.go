@@ -8,7 +8,9 @@ import (
 
 // SQLServerRows struct
 type SQLServerRows struct {
-	sqr *sql.Rows
+	pageId    string
+	pageCount int
+	sqr       *sql.Rows
 }
 
 // NewSQLServerRows generates a datahelper compatible SQLServerRows
@@ -37,20 +39,15 @@ func (ss SQLServerRows) Next() bool {
 
 // Scan to destination variables
 func (ss SQLServerRows) Scan(dest ...interface{}) error {
-
 	destq := prepareDest(dest)
-
 	err := ss.sqr.Scan(destq...)
 	if err != nil {
 		return err
 	}
-
-	// return values
 	err = copyScannedToDest(dest, destq)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -61,12 +58,10 @@ func (ss SQLServerRows) Values() ([]interface{}, error) {
 
 // Columns from the rows
 func (ss SQLServerRows) Columns() ([]datahelperlite.Column, error) {
-
 	cts, err := ss.sqr.ColumnTypes()
 	if err != nil {
 		return nil, err
 	}
-
 	ctps := make([]datahelperlite.Column, len(cts))
 	for i, ct := range cts {
 		ctps[i] = Column{
@@ -75,11 +70,20 @@ func (ss SQLServerRows) Columns() ([]datahelperlite.Column, error) {
 			scntyp:  ct.ScanType(),
 		}
 	}
-
 	return ctps, nil
 }
 
 // RawValues from the rows
 func (ss SQLServerRows) RawValues() [][]byte {
 	return nil
+}
+
+// PageID as a result of paged query
+func (ss SQLServerRows) PageID() string {
+	return ss.pageId
+}
+
+// PageCount as a result of a paged query
+func (ss SQLServerRows) PageCount() int {
+	return ss.pageCount
 }

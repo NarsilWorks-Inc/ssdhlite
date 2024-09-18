@@ -18,20 +18,13 @@ func NewSQLServerRow(sqlr *sql.Row) SQLServerRow {
 
 // Scan to destination variables
 func (ss SQLServerRow) Scan(dest ...interface{}) error {
-
 	destq := prepareDest(dest)
-
-	err := ss.sqr.Scan(destq...)
-	if err != nil {
+	if err := ss.sqr.Scan(destq...); err != nil {
 		return err
 	}
-
-	// return values
-	err = copyScannedToDest(dest, destq)
-	if err != nil {
+	if err := copyScannedToDest(dest, destq); err != nil {
 		return err
 	}
-
 	return nil
 
 }
