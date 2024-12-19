@@ -707,8 +707,8 @@ func TestExecRowsAffected(t *testing.T) {
 	}
 	defer c.Close()
 
-	tranid, _ := c.BeginDR()
-	defer c.Rollback(tranid)
+	c.Begin()
+	defer c.Rollback()
 
 	affr, err = c.Exec(`UPDATE {useraccount}
 						SET activation_code = ?,
@@ -718,7 +718,75 @@ func TestExecRowsAffected(t *testing.T) {
 		t.Fatalf(`%s`, err)
 	}
 
-	c.Commit(tranid)
+	c.Commit()
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestNestedTransDelete(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`APPSHUB-LENOVO-LINUX`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {user_group} WHERE usergrouping_key = ?`, 29)
+		if err != nil {
+			return
+		}
+		dh.Commit()
+	}
+
+	// three := func(dh dhl.DataHelperLite) {
+	// 	dh.Begin()
+	// 	defer dh.Rollback()
+	// 	affr, err = dh.Exec(`DELETE FROM {user_account} WHERE usergrouping_key = ?`, 128)
+	// 	if err != nil {
+	// 		t.Fatalf(`%s`, err)
+	// 	}
+	// 	dh.Commit()
+	// }
+
+	// This code commits the first one even though the 2nd one (two) encounters an error
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {user_grouping} WHERE usergroup_key = ?`, 29)
+		if err != nil {
+			return
+		}
+
+		two(dh)
+		//three(dh)
+
+		dh.Commit()
+	}
+
+	one(c)
 
 	t.Logf(`Affected rows %d`, affr)
 }
