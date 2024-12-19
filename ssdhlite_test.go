@@ -12,6 +12,68 @@ import (
 	ssd "github.com/shopspring/decimal"
 )
 
+const (
+	MasterSlaveSQL string = `
+		SET NOCOUNT ON
+
+		IF OBJECT_ID(N'dbo.SlaveTable1', N'U') IS NOT NULL
+			DROP TABLE dbo.SlaveTable1
+
+		IF OBJECT_ID(N'dbo.SlaveTable2', N'U') IS NOT NULL
+			DROP TABLE dbo.SlaveTable2
+
+		IF OBJECT_ID(N'dbo.MasterTable', N'U') IS NOT NULL
+			DROP TABLE dbo.MasterTable;
+
+		CREATE TABLE dbo.MasterTable (
+			ID int,
+			Code nvarchar(10),
+			[Name] nvarchar(25),
+			CONSTRAINT [PK_MasterTable] PRIMARY KEY CLUSTERED ([ID])
+		);
+
+
+		CREATE TABLE dbo.SlaveTable1 (
+			ParentID int,
+			ID int,
+			Code nvarchar(10),
+			[Name] nvarchar(25),
+			CONSTRAINT [PK_SlaveTable1] PRIMARY KEY CLUSTERED ([ID])
+		);
+
+		CREATE TABLE dbo.SlaveTable2 (
+			ParentID int,
+			ID int,
+			Code nvarchar(10),
+			[Name] nvarchar(25),
+			CONSTRAINT [PK_SlaveTable2] PRIMARY KEY CLUSTERED ([ID])
+		);
+
+		ALTER TABLE [dbo].[SlaveTable1]  WITH CHECK ADD  CONSTRAINT [FK_SlaveTable1_MasterTable] FOREIGN KEY([ParentID])
+		REFERENCES [dbo].[MasterTable] ([ID]);
+
+		ALTER TABLE [dbo].[SlaveTable1] CHECK CONSTRAINT [FK_SlaveTable1_MasterTable];
+
+		ALTER TABLE [dbo].[SlaveTable2]  WITH CHECK ADD  CONSTRAINT [FK_SlaveTable2_MasterTable] FOREIGN KEY([ParentID])
+		REFERENCES [dbo].[MasterTable] ([ID]);
+
+		ALTER TABLE [dbo].[SlaveTable2] CHECK CONSTRAINT [FK_SlaveTable2_MasterTable];
+
+
+		INSERT INTO dbo.MasterTable (ID, Code, [Name]) VALUES (1, 'CODE1', 'Code 1');
+		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (1, 'SLAV1CODE1', 'Slave1 Code 1', 1);
+		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (2, 'SLAV1CODE2', 'Slave1 Code 2', 1);
+		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (3, 'SLAV1CODE3', 'Slave1 Code 3', 1);
+		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (4, 'SLAV1CODE4', 'Slave1 Code 4', 1);
+		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (5, 'SLAV1CODE5', 'Slave1 Code 5', 1);
+		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (6, 'SLAV2CODE1', 'Slave2 Code 1', 1);
+		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (7, 'SLAV2CODE2', 'Slave2 Code 2', 1);
+		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (8, 'SLAV2CODE3', 'Slave2 Code 3', 1);
+		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (9, 'SLAV2CODE4', 'Slave2 Code 4', 1);
+		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (10, 'SLAV2CODE5', 'Slave2 Code 5', 1);
+	`
+)
+
 func TestGetRows(t *testing.T) {
 
 	var (
@@ -723,7 +785,7 @@ func TestExecRowsAffected(t *testing.T) {
 	t.Logf(`Affected rows %d`, affr)
 }
 
-func TestNestedTransDelete(t *testing.T) {
+func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 	var (
 		err  error
 		affr int64
@@ -744,45 +806,514 @@ func TestNestedTransDelete(t *testing.T) {
 		return
 	}
 
-	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`APPSHUB-LENOVO-LINUX`)); err != nil {
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
 		t.Log(err.Error())
 		t.Fail()
 		return
 	}
 	defer c.Close()
 
-	two := func(dh dhl.DataHelperLite) {
+	// Drop and Create table
+	// Insert data
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
 		dh.Begin()
 		defer dh.Rollback()
-		affr, err = dh.Exec(`DELETE FROM {user_group} WHERE usergrouping_key = ?`, 29)
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
 		if err != nil {
 			return
 		}
 		dh.Commit()
 	}
 
-	// three := func(dh dhl.DataHelperLite) {
-	// 	dh.Begin()
-	// 	defer dh.Rollback()
-	// 	affr, err = dh.Exec(`DELETE FROM {user_account} WHERE usergrouping_key = ?`, 128)
-	// 	if err != nil {
-	// 		t.Fatalf(`%s`, err)
-	// 	}
-	// 	dh.Commit()
-	// }
-
-	// This code commits the first one even though the 2nd one (two) encounters an error
-	one := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLite) {
 		dh.Begin()
 		defer dh.Rollback()
-		affr, err = dh.Exec(`DELETE FROM {user_grouping} WHERE usergroup_key = ?`, 29)
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
 		if err != nil {
 			return
 		}
+		three(dh)
+		dh.Commit()
+	}
 
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+		if err != nil {
+			return
+		}
 		two(dh)
-		//three(dh)
+		dh.Commit()
+	}
 
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
+		if err != nil {
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
+		if err != nil {
+			return
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentIDX = ?`, 1)
+		if err != nil {
+			return
+		}
+		two(dh)
+		dh.Commit()
+	}
+
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
+		if err != nil {
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentIDX = ?`, 1)
+		if err != nil {
+			return
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+		if err != nil {
+			return
+		}
+		two(dh)
+		dh.Commit()
+	}
+
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE IDX = ?`, 1)
+		if err != nil {
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
+		if err != nil {
+			t.Fatalf(`%s`, err)
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		defer dh.Rollback()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+		if err != nil {
+			return
+		}
+		two(dh)
+		dh.Commit()
+	}
+
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentIDX = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		two(dh)
+		dh.Commit()
+	}
+
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentIDX = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		two(dh)
+		dh.Commit()
+	}
+
+	one(c)
+
+	t.Logf(`Affected rows %d`, affr)
+}
+
+func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
+	var (
+		err  error
+		affr int64
+		c    dhl.DataHelperLite
+	)
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = c.Open(context.Background(), cf.GetDatabaseInfo(`TESTDB-HOME`)); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Delete master record
+	three := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE IDX = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		dh.Commit()
+	}
+
+	two := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		three(dh)
+		dh.Commit()
+	}
+
+	one := func(dh dhl.DataHelperLite) {
+		dh.Begin()
+		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+		if err != nil {
+			dh.Rollback()
+			return
+		}
+		two(dh)
 		dh.Commit()
 	}
 

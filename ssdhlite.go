@@ -23,11 +23,11 @@ type SQLServerHelper struct {
 	ctx context.Context
 	trCnt,
 	reuseCnt uint8
-	closemu    sync.RWMutex
-	txInst     map[uint8]uint8
-	lastTxInst uint8
-	conn       *sql.Conn
-	err        error
+	rw        sync.RWMutex
+	txInst    map[uint8]uint8
+	txInstIdx uint8
+	conn      *sql.Conn
+	err       error
 }
 
 func init() {
@@ -38,8 +38,8 @@ func init() {
 // NewHelper instantiates new helper
 func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 	return &SQLServerHelper{
-		txInst:     make(map[uint8]uint8),
-		lastTxInst: 0,
+		txInst:    make(map[uint8]uint8),
+		txInstIdx: 0,
 	}
 }
 
@@ -47,7 +47,7 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
 	h.err = nil
 	h.txInst = map[uint8]uint8{}
-	h.lastTxInst = 0
+	h.txInstIdx = 0
 	h.dbi = di
 	if ctx == nil {
 		ctx = context.Background()
@@ -55,9 +55,9 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.ctx = ctx
 
 	if !(h.db == nil || h.conn == nil) {
-		h.closemu.Lock()
+		h.rw.Lock()
 		h.reuseCnt++
-		h.closemu.Unlock()
+		h.rw.Unlock()
 		return nil
 	}
 
@@ -81,9 +81,9 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	if h.err != nil {
 		return fmt.Errorf("open: %w", h.err)
 	}
-	h.closemu.Lock()
+	h.rw.Lock()
 	h.reuseCnt = 0
-	h.closemu.Unlock()
+	h.rw.Unlock()
 	return nil
 }
 
@@ -95,9 +95,9 @@ func (h *SQLServerHelper) Close() error {
 	// if reused, closing will be prevented
 	// until reusing is zero
 	if h.reuseCnt > 0 {
-		h.closemu.Lock()
+		h.rw.Lock()
 		h.reuseCnt--
-		h.closemu.Unlock()
+		h.rw.Unlock()
 		return nil
 	}
 	// check if transaction exists
@@ -114,12 +114,12 @@ func (h *SQLServerHelper) Close() error {
 		h.conn = nil
 		return h.err
 	}
-	h.closemu.Lock()
+	h.rw.Lock()
 	h.trCnt = 0
 	h.db = nil
 	h.conn = nil
 	h.err = nil
-	h.closemu.Unlock()
+	h.rw.Unlock()
 	return nil
 }
 
@@ -137,120 +137,136 @@ func (h *SQLServerHelper) Begin() error {
 			return fmt.Errorf("begin: %w", h.err)
 		}
 	}
-	h.closemu.Lock()
+	// Increment transaction count
+	// The transaction count will serve as the key for the new map value, set to 1
+	// Move the new index to the forward position
+	h.rw.Lock()
 	h.trCnt++
 	h.txInst[h.trCnt] = 1
-	h.lastTxInst = h.trCnt
-	h.closemu.Unlock()
+	h.txInstIdx = h.trCnt
+	h.rw.Unlock()
 	return nil
 }
 
 // Commit a transaction
 func (h *SQLServerHelper) Commit() error {
+
+	// if h.err != nil {
+	// 	return h.Rollback()
+	// }
+
 	// txInst is used to identify the current transaction
-	// If the current tx instance (lastTxInst) is not found on the map,
-	// it will not do anything
-	if _, ok := h.txInst[h.lastTxInst]; !ok {
+	// If the current tx index (txInstIdx) is not found on the map,
+	// or the flag was set to 0, it will not do anything
+	flag, ok := h.txInst[h.txInstIdx]
+	if !ok {
+		return nil
+	}
+	// Move down one transaction instance since we can't find this
+	if flag == 0 {
+		h.rw.Lock()
+		h.txInstIdx--
+		h.rw.Unlock()
 		return nil
 	}
 
-	// If found, the key is deleted
-	defer func() {
-		h.closemu.Lock()
-		delete(h.txInst, h.lastTxInst)
-		h.lastTxInst--
-		h.closemu.Unlock()
-	}()
-
-	// Exit if the connection was just reused
+	// If the transaction count is greater than 1, this is reused, exit.
 	if h.trCnt > 1 {
-		h.closemu.Lock()
-		h.trCnt-- // deduct from transaction count
-		h.closemu.Unlock()
+		h.rw.Lock()
+		h.trCnt--                 // Deduct from transaction count
+		h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current instance has been called
+		h.rw.Unlock()
 		return nil
 	}
+
+	// If the db and connection is not set, return an error
+	// If the transaction is not set, return an error
 	if h.db == nil || h.conn == nil {
 		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
 	}
 	if h.tx == nil {
 		return fmt.Errorf("commit: %w", dhl.ErrNoTx)
 	}
-	// If any of the queries have encountered error, rollback
-	if h.err != nil {
-		return h.Rollback()
-	}
+
+	// If this is the outer transaction, commit
 	if h.trCnt == 1 {
 		if h.err = h.tx.Commit(); h.err != nil {
 			if !errors.Is(h.err, sql.ErrTxDone) {
 				return fmt.Errorf("commit: %w", h.err)
 			}
-			h.tx = nil
-			return fmt.Errorf("commit: %w", h.err)
 		}
 	}
-	// Decrement transaction
-	h.closemu.Lock()
-	if h.trCnt > 0 {
-		h.trCnt--
-	}
-	// if trancount is zero, we can set the tx to nil
-	if h.trCnt == 0 {
-		h.tx = nil
-	}
-	h.closemu.Unlock()
+
+	// Reset all transaction logs
+	h.rw.Lock()
+	h.tx = nil
+	h.trCnt = 0
+	h.txInstIdx = 0
+	h.txInst = make(map[uint8]uint8)
+	h.rw.Unlock()
 	return nil
 }
 
 // Rollback a transaction.
 func (h *SQLServerHelper) Rollback() error {
 
-	// txInst is used to identify the current transaction
-	// If the current tx instance (lastTxInst) is not found on the map,
-	// it will not do anything
-	if _, ok := h.txInst[h.lastTxInst]; !ok {
-		return nil
+	// If any of the queries have encountered error, rollback
+	if h.err != nil {
+		h.rw.Lock()
+		h.trCnt = 1
+		h.rw.Unlock()
+	} else {
+		// txInst is used to identify the current transaction
+		// If the current tx index (txInstIdx) is not found on the map,
+		// or the flag was set to 0, it will not do anything
+		flag, ok := h.txInst[h.txInstIdx]
+		if !ok {
+			return nil
+		}
+
+		// Move down one transaction instance since we can't find this
+		if flag == 0 {
+			h.rw.Lock()
+			h.txInstIdx--
+			h.rw.Unlock()
+			return nil
+		}
+
+		// If the transaction count is greater than 1, this is reused, exit.
+		if h.trCnt > 1 {
+			h.rw.Lock()
+			h.trCnt--                 // Deduct from transaction count
+			h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current index has been called
+			h.rw.Unlock()
+			return nil
+		}
 	}
 
-	// If found, the key is deleted
-	defer func() {
-		h.closemu.Lock()
-		delete(h.txInst, h.lastTxInst)
-		h.lastTxInst--
-		h.closemu.Unlock()
-	}()
-
-	// exit if the connection was just reused
-	if h.trCnt > 1 {
-		h.closemu.Lock()
-		h.trCnt-- // deduct from transaction count
-		h.closemu.Unlock()
-		return nil
-	}
+	// If the db and connection is not set, return an error
+	// If the transaction is not set, return an error
 	if h.db == nil || h.conn == nil {
 		return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
 	}
 	if h.tx == nil {
 		return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
 	}
+
+	// If this is the outer transaction, rollback
 	if h.trCnt == 1 {
 		if h.err = h.tx.Rollback(); h.err != nil {
 			if !errors.Is(h.err, sql.ErrTxDone) {
 				return fmt.Errorf("rollback: %w", h.err)
 			}
-			h.tx = nil
-			return fmt.Errorf("rollback: %w", h.err)
 		}
 	}
-	// decrement transaction
-	h.closemu.Lock()
-	if h.trCnt > 0 {
-		h.trCnt--
-	}
-	// if trancount is zero, we can set the tx to nil
-	if h.trCnt == 0 {
-		h.tx = nil
-	}
-	h.closemu.Unlock()
+
+	// Reset all transaction logs
+	h.rw.Lock()
+	h.tx = nil
+	h.trCnt = 0
+	h.txInstIdx = 0
+	h.txInst = make(map[uint8]uint8)
+	h.rw.Unlock()
 	return nil
 }
 
