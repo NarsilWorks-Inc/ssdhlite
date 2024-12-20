@@ -17,17 +17,17 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	db  *sql.DB
-	tx  *sql.Tx
-	dbi *cfg.DatabaseInfo
-	ctx context.Context
+	db   *sql.DB
+	tx   *sql.Tx
+	conn *sql.Conn
+	dbi  *cfg.DatabaseInfo
+	ctx  context.Context
 	trCnt,
-	reuseCnt uint8
-	rw        sync.RWMutex
-	txInst    map[uint8]uint8
+	reuseCnt,
 	txInstIdx uint8
-	conn      *sql.Conn
-	err       error
+	rw     sync.RWMutex
+	txInst map[uint8]uint8
+	err    error
 }
 
 func init() {
@@ -46,7 +46,7 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 // Open a new connection
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
 	h.err = nil
-	h.txInst = map[uint8]uint8{}
+	h.txInst = make(map[uint8]uint8)
 	h.txInstIdx = 0
 	h.dbi = di
 	if ctx == nil {
