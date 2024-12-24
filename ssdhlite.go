@@ -148,39 +148,149 @@ func (h *SQLServerHelper) Begin() error {
 	return nil
 }
 
-// Commit a transaction
+// // Commit a transaction
+// func (h *SQLServerHelper) Commit() error {
+
+// 	// if h.err != nil {
+// 	// 	return h.Rollback()
+// 	// }
+
+// 	// txInst is used to identify the current transaction
+// 	// If the current tx index (txInstIdx) is not found on the map,
+// 	// or the flag was set to 0, it will not do anything
+// 	flag, ok := h.txInst[h.txInstIdx]
+// 	if !ok {
+// 		return nil
+// 	}
+// 	// Move down one transaction instance since we can't find this
+// 	if flag == 0 {
+// 		h.rw.Lock()
+// 		h.txInstIdx--
+// 		h.rw.Unlock()
+// 		return nil
+// 	}
+
+// 	// If the transaction count is greater than 1, this is reused, exit.
+// 	if h.trCnt > 1 {
+// 		h.rw.Lock()
+// 		h.trCnt--                 // Deduct from transaction count
+// 		h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current instance has been called
+// 		h.rw.Unlock()
+// 		return nil
+// 	}
+
+// 	// If the db and connection is not set, return an error
+// 	// If the transaction is not set, return an error
+// 	if h.db == nil || h.conn == nil {
+// 		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
+// 	}
+// 	if h.tx == nil {
+// 		return fmt.Errorf("commit: %w", dhl.ErrNoTx)
+// 	}
+
+// 	// If this is the outer transaction, commit
+// 	if h.trCnt == 1 {
+// 		if h.err = h.tx.Commit(); h.err != nil {
+// 			if !errors.Is(h.err, sql.ErrTxDone) {
+// 				return fmt.Errorf("commit: %w", h.err)
+// 			}
+// 		}
+// 	}
+
+// 	// Reset all transaction logs
+// 	h.rw.Lock()
+// 	h.tx = nil
+// 	h.trCnt = 0
+// 	h.txInstIdx = 0
+// 	h.txInst = make(map[uint8]uint8)
+// 	h.rw.Unlock()
+// 	return nil
+// }
+
+// // Rollback a transaction.
+// func (h *SQLServerHelper) Rollback() error {
+
+// 	// If any of the queries have encountered error, rollback
+// 	if h.err != nil {
+// 		h.rw.Lock()
+// 		h.trCnt = 1
+// 		h.rw.Unlock()
+// 	} else {
+// 		// txInst is used to identify the current transaction
+// 		// If the current tx index (txInstIdx) is not found on the map,
+// 		// or the flag was set to 0, it will not do anything
+// 		flag, ok := h.txInst[h.txInstIdx]
+// 		if !ok {
+// 			return nil
+// 		}
+
+// 		// Move down one transaction instance since we can't find this
+// 		if flag == 0 {
+// 			h.rw.Lock()
+// 			h.txInstIdx--
+// 			h.rw.Unlock()
+// 			return nil
+// 		}
+
+// 		// If the transaction count is greater than 1, this is reused, exit.
+// 		if h.trCnt > 1 {
+// 			h.rw.Lock()
+// 			h.trCnt--                 // Deduct from transaction count
+// 			h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current index has been called
+// 			h.rw.Unlock()
+// 			return nil
+// 		}
+// 	}
+
+// 	// If the db and connection is not set, return an error
+// 	// If the transaction is not set, return an error
+// 	if h.db == nil || h.conn == nil {
+// 		return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
+// 	}
+// 	if h.tx == nil {
+// 		return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
+// 	}
+
+// 	// If this is the outer transaction, rollback
+// 	if h.trCnt == 1 {
+// 		if h.err = h.tx.Rollback(); h.err != nil {
+// 			if !errors.Is(h.err, sql.ErrTxDone) {
+// 				return fmt.Errorf("rollback: %w", h.err)
+// 			}
+// 		}
+// 	}
+
+// 	// Reset all transaction logs
+// 	h.rw.Lock()
+// 	h.tx = nil
+// 	h.trCnt = 0
+// 	h.txInstIdx = 0
+// 	h.txInst = make(map[uint8]uint8)
+// 	h.rw.Unlock()
+// 	return nil
+// }
+
 func (h *SQLServerHelper) Commit() error {
+	h.rw.Lock()
+	defer h.rw.Unlock()
 
-	// if h.err != nil {
-	// 	return h.Rollback()
-	// }
-
-	// txInst is used to identify the current transaction
-	// If the current tx index (txInstIdx) is not found on the map,
-	// or the flag was set to 0, it will not do anything
+	// Check if the current transaction instance is valid
 	flag, ok := h.txInst[h.txInstIdx]
-	if !ok {
-		return nil
-	}
-	// Move down one transaction instance since we can't find this
-	if flag == 0 {
-		h.rw.Lock()
-		h.txInstIdx--
-		h.rw.Unlock()
+	if !ok || flag == 0 {
+		if ok {
+			h.txInstIdx-- // Move to the previous transaction instance
+		}
 		return nil
 	}
 
-	// If the transaction count is greater than 1, this is reused, exit.
+	// Handle nested transactions
 	if h.trCnt > 1 {
-		h.rw.Lock()
-		h.trCnt--                 // Deduct from transaction count
-		h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current instance has been called
-		h.rw.Unlock()
+		h.trCnt--
+		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
 		return nil
 	}
 
-	// If the db and connection is not set, return an error
-	// If the transaction is not set, return an error
+	// Ensure DB, connection, and transaction are valid before committing
 	if h.db == nil || h.conn == nil {
 		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
 	}
@@ -188,85 +298,65 @@ func (h *SQLServerHelper) Commit() error {
 		return fmt.Errorf("commit: %w", dhl.ErrNoTx)
 	}
 
-	// If this is the outer transaction, commit
+	// Commit the outermost transaction
 	if h.trCnt == 1 {
-		if h.err = h.tx.Commit(); h.err != nil {
-			if !errors.Is(h.err, sql.ErrTxDone) {
-				return fmt.Errorf("commit: %w", h.err)
-			}
+		if err := h.tx.Commit(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			return fmt.Errorf("commit: %w", err)
 		}
 	}
 
-	// Reset all transaction logs
-	h.rw.Lock()
+	// Reset transaction state after a successful commit
 	h.tx = nil
 	h.trCnt = 0
 	h.txInstIdx = 0
 	h.txInst = make(map[uint8]uint8)
-	h.rw.Unlock()
+
 	return nil
 }
 
-// Rollback a transaction.
 func (h *SQLServerHelper) Rollback() error {
-
-	// If any of the queries have encountered error, rollback
-	if h.err != nil {
-		h.rw.Lock()
-		h.trCnt = 1
-		h.rw.Unlock()
-	} else {
-		// txInst is used to identify the current transaction
-		// If the current tx index (txInstIdx) is not found on the map,
-		// or the flag was set to 0, it will not do anything
-		flag, ok := h.txInst[h.txInstIdx]
-		if !ok {
-			return nil
-		}
-
-		// Move down one transaction instance since we can't find this
-		if flag == 0 {
-			h.rw.Lock()
-			h.txInstIdx--
-			h.rw.Unlock()
-			return nil
-		}
-
-		// If the transaction count is greater than 1, this is reused, exit.
-		if h.trCnt > 1 {
-			h.rw.Lock()
-			h.trCnt--                 // Deduct from transaction count
-			h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current index has been called
-			h.rw.Unlock()
-			return nil
-		}
-	}
-
-	// If the db and connection is not set, return an error
-	// If the transaction is not set, return an error
-	if h.db == nil || h.conn == nil {
-		return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
-	}
-	if h.tx == nil {
-		return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
-	}
-
-	// If this is the outer transaction, rollback
-	if h.trCnt == 1 {
-		if h.err = h.tx.Rollback(); h.err != nil {
-			if !errors.Is(h.err, sql.ErrTxDone) {
-				return fmt.Errorf("rollback: %w", h.err)
-			}
-		}
-	}
-
-	// Reset all transaction logs
 	h.rw.Lock()
-	h.tx = nil
-	h.trCnt = 0
-	h.txInstIdx = 0
-	h.txInst = make(map[uint8]uint8)
-	h.rw.Unlock()
+	defer h.rw.Unlock()
+
+	// If there's an error or this is the outermost transaction, rollback
+	if h.err != nil || h.trCnt == 1 {
+		// Ensure DB, connection, and transaction are valid before rolling back
+		if h.db == nil || h.conn == nil {
+			return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
+		}
+		if h.tx == nil {
+			return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
+		}
+
+		// Perform rollback
+		if err := h.tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			return fmt.Errorf("rollback: %w", err)
+		}
+
+		// Reset all transaction state after rollback
+		h.tx = nil
+		h.trCnt = 0
+		h.txInstIdx = 0
+		h.txInst = make(map[uint8]uint8)
+		return nil
+	}
+
+	// Handle nested transactions
+	flag, ok := h.txInst[h.txInstIdx]
+	if !ok || flag == 0 {
+		if ok {
+			h.txInstIdx-- // Move to the previous transaction instance
+		}
+		return nil
+	}
+
+	// Deduct transaction count for nested transactions
+	if h.trCnt > 1 {
+		h.trCnt--
+		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
+		return nil
+	}
+
 	return nil
 }
 

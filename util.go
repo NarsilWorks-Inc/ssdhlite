@@ -122,7 +122,8 @@ func copyScannedToDest(dest, src []interface{}) error {
 			case *[]byte:
 				*s = *x
 			case []byte:
-				s = *x
+				//s = *x
+				copy(dest[i].(json.RawMessage), *x)
 			case *json.RawMessage:
 				*s = *x
 			case json.RawMessage:
@@ -149,7 +150,8 @@ func copyScannedToDest(dest, src []interface{}) error {
 				**s = string(([]byte)(*x))
 			case interface{}:
 				xs := string(([]byte)(*x))
-				s = &xs
+				// s = &xs
+				dest[i] = xs
 			default:
 				return errors.New(`unhandled sql.RawBytes type`)
 			}
