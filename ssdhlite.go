@@ -45,6 +45,15 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 
 // Open a new connection
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
+
+	// If Sql handle and connection is valid
+	if h.db != nil && h.conn != nil {
+		h.rw.Lock()
+		h.reuseCnt++
+		h.rw.Unlock()
+		return nil
+	}
+
 	h.err = nil
 	h.txInst = make(map[uint8]uint8)
 	h.txInstIdx = 0
@@ -54,33 +63,32 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	}
 	h.ctx = ctx
 
-	if !(h.db == nil || h.conn == nil) {
-		h.rw.Lock()
-		h.reuseCnt++
-		h.rw.Unlock()
-		return nil
+	if h.db == nil {
+		h.db, h.err = sql.Open(`sqlserver`, di.ConnectionString)
+		if h.err != nil {
+			return fmt.Errorf("open: %w", h.err)
+		}
+		if di.MaxOpenConnection != nil {
+			h.db.SetMaxOpenConns(*di.MaxOpenConnection)
+		}
+		if di.MaxIdleConnection != nil {
+			h.db.SetMaxIdleConns(*di.MaxIdleConnection)
+		}
+		if di.MaxConnectionLifetime != nil {
+			h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
+		}
+		if di.MaxConnectionIdleTime != nil {
+			h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
+		}
 	}
 
-	h.db, h.err = sql.Open(`sqlserver`, di.ConnectionString)
-	if h.err != nil {
-		return fmt.Errorf("open: %w", h.err)
+	if h.conn == nil {
+		h.conn, h.err = h.db.Conn(h.ctx)
+		if h.err != nil {
+			return fmt.Errorf("open: %w", h.err)
+		}
 	}
-	if di.MaxOpenConnection != nil {
-		h.db.SetMaxOpenConns(*di.MaxOpenConnection)
-	}
-	if di.MaxIdleConnection != nil {
-		h.db.SetMaxIdleConns(*di.MaxIdleConnection)
-	}
-	if di.MaxConnectionLifetime != nil {
-		h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
-	}
-	if di.MaxConnectionIdleTime != nil {
-		h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
-	}
-	h.conn, h.err = h.db.Conn(h.ctx)
-	if h.err != nil {
-		return fmt.Errorf("open: %w", h.err)
-	}
+
 	h.rw.Lock()
 	h.reuseCnt = 0
 	h.rw.Unlock()
@@ -89,9 +97,11 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 
 // Close the helper
 func (h *SQLServerHelper) Close() error {
-	if h.db == nil && h.conn == nil {
+
+	if h.conn == nil {
 		return nil
 	}
+
 	// if reused, closing will be prevented
 	// until reusing is zero
 	if h.reuseCnt > 0 {
@@ -100,23 +110,19 @@ func (h *SQLServerHelper) Close() error {
 		h.rw.Unlock()
 		return nil
 	}
-	// check if transaction exists
+
+	// check if transaction exists,
+	// rollback if it exists
 	if h.tx != nil {
 		h.Rollback()
 	}
+
 	if h.err = h.conn.Close(); h.err != nil {
-		h.db = nil
-		h.conn = nil
 		return h.err
 	}
-	if h.err = h.db.Close(); h.err != nil {
-		h.db = nil
-		h.conn = nil
-		return h.err
-	}
+
 	h.rw.Lock()
 	h.trCnt = 0
-	h.db = nil
 	h.conn = nil
 	h.err = nil
 	h.rw.Unlock()
@@ -148,142 +154,25 @@ func (h *SQLServerHelper) Begin() error {
 	return nil
 }
 
-// // Commit a transaction
-// func (h *SQLServerHelper) Commit() error {
-
-// 	// if h.err != nil {
-// 	// 	return h.Rollback()
-// 	// }
-
-// 	// txInst is used to identify the current transaction
-// 	// If the current tx index (txInstIdx) is not found on the map,
-// 	// or the flag was set to 0, it will not do anything
-// 	flag, ok := h.txInst[h.txInstIdx]
-// 	if !ok {
-// 		return nil
-// 	}
-// 	// Move down one transaction instance since we can't find this
-// 	if flag == 0 {
-// 		h.rw.Lock()
-// 		h.txInstIdx--
-// 		h.rw.Unlock()
-// 		return nil
-// 	}
-
-// 	// If the transaction count is greater than 1, this is reused, exit.
-// 	if h.trCnt > 1 {
-// 		h.rw.Lock()
-// 		h.trCnt--                 // Deduct from transaction count
-// 		h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current instance has been called
-// 		h.rw.Unlock()
-// 		return nil
-// 	}
-
-// 	// If the db and connection is not set, return an error
-// 	// If the transaction is not set, return an error
-// 	if h.db == nil || h.conn == nil {
-// 		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
-// 	}
-// 	if h.tx == nil {
-// 		return fmt.Errorf("commit: %w", dhl.ErrNoTx)
-// 	}
-
-// 	// If this is the outer transaction, commit
-// 	if h.trCnt == 1 {
-// 		if h.err = h.tx.Commit(); h.err != nil {
-// 			if !errors.Is(h.err, sql.ErrTxDone) {
-// 				return fmt.Errorf("commit: %w", h.err)
-// 			}
-// 		}
-// 	}
-
-// 	// Reset all transaction logs
-// 	h.rw.Lock()
-// 	h.tx = nil
-// 	h.trCnt = 0
-// 	h.txInstIdx = 0
-// 	h.txInst = make(map[uint8]uint8)
-// 	h.rw.Unlock()
-// 	return nil
-// }
-
-// // Rollback a transaction.
-// func (h *SQLServerHelper) Rollback() error {
-
-// 	// If any of the queries have encountered error, rollback
-// 	if h.err != nil {
-// 		h.rw.Lock()
-// 		h.trCnt = 1
-// 		h.rw.Unlock()
-// 	} else {
-// 		// txInst is used to identify the current transaction
-// 		// If the current tx index (txInstIdx) is not found on the map,
-// 		// or the flag was set to 0, it will not do anything
-// 		flag, ok := h.txInst[h.txInstIdx]
-// 		if !ok {
-// 			return nil
-// 		}
-
-// 		// Move down one transaction instance since we can't find this
-// 		if flag == 0 {
-// 			h.rw.Lock()
-// 			h.txInstIdx--
-// 			h.rw.Unlock()
-// 			return nil
-// 		}
-
-// 		// If the transaction count is greater than 1, this is reused, exit.
-// 		if h.trCnt > 1 {
-// 			h.rw.Lock()
-// 			h.trCnt--                 // Deduct from transaction count
-// 			h.txInst[h.txInstIdx] = 0 // Set flag to 0 to indicate the current index has been called
-// 			h.rw.Unlock()
-// 			return nil
-// 		}
-// 	}
-
-// 	// If the db and connection is not set, return an error
-// 	// If the transaction is not set, return an error
-// 	if h.db == nil || h.conn == nil {
-// 		return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
-// 	}
-// 	if h.tx == nil {
-// 		return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
-// 	}
-
-// 	// If this is the outer transaction, rollback
-// 	if h.trCnt == 1 {
-// 		if h.err = h.tx.Rollback(); h.err != nil {
-// 			if !errors.Is(h.err, sql.ErrTxDone) {
-// 				return fmt.Errorf("rollback: %w", h.err)
-// 			}
-// 		}
-// 	}
-
-// 	// Reset all transaction logs
-// 	h.rw.Lock()
-// 	h.tx = nil
-// 	h.trCnt = 0
-// 	h.txInstIdx = 0
-// 	h.txInst = make(map[uint8]uint8)
-// 	h.rw.Unlock()
-// 	return nil
-// }
-
 func (h *SQLServerHelper) Commit() error {
+
+	// Return early if any of the conditions are true
+	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
+		return nil
+	}
+
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
 	// Check if the current transaction instance is valid
-	flag, ok := h.txInst[h.txInstIdx]
-	if !ok || flag == 0 {
-		if ok {
-			h.txInstIdx-- // Move to the previous transaction instance
-		}
+	if flag := h.txInst[h.txInstIdx]; flag == 0 {
+		h.txInstIdx-- // Move to the previous transaction instance
 		return nil
 	}
 
-	// Handle nested transactions
+	// If the transaction is not the first transaction,
+	// reduce the transaction count and set the current map index value
+	// as processed
 	if h.trCnt > 1 {
 		h.trCnt--
 		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
@@ -291,7 +180,7 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	// Ensure DB, connection, and transaction are valid before committing
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
 	}
 	if h.tx == nil {
@@ -315,13 +204,36 @@ func (h *SQLServerHelper) Commit() error {
 }
 
 func (h *SQLServerHelper) Rollback() error {
+
+	// Return early if any of the conditions are true
+	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
+		return nil
+	}
+
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
-	// If there's an error or this is the outermost transaction, rollback
-	if h.err != nil || h.trCnt == 1 {
+	// Handle nested transactions
+	// If the value of the map is zero, we move to the earlier transaction
+	if flag := h.txInst[h.txInstIdx]; flag == 0 {
+		h.txInstIdx--
+		return nil
+	}
+
+	// If the transaction is not the first transaction,
+	// reduce the transaction count and set the current map index value
+	// as processed
+	if h.trCnt > 1 {
+		h.trCnt--
+		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
+		return nil
+	}
+
+	// If this is the outermost transaction, rollback the transaction
+	// If the queries resulted an error, we also roll it back
+	if h.trCnt == 1 || h.err != nil {
 		// Ensure DB, connection, and transaction are valid before rolling back
-		if h.db == nil || h.conn == nil {
+		if h.conn == nil {
 			return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
 		}
 		if h.tx == nil {
@@ -341,22 +253,6 @@ func (h *SQLServerHelper) Rollback() error {
 		return nil
 	}
 
-	// Handle nested transactions
-	flag, ok := h.txInst[h.txInstIdx]
-	if !ok || flag == 0 {
-		if ok {
-			h.txInstIdx-- // Move to the previous transaction instance
-		}
-		return nil
-	}
-
-	// Deduct transaction count for nested transactions
-	if h.trCnt > 1 {
-		h.trCnt--
-		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
-		return nil
-	}
-
 	return nil
 }
 
@@ -365,7 +261,7 @@ func (h *SQLServerHelper) Mark(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return fmt.Errorf("mark: %w", dhl.ErrNoConn)
 	}
 	if h.tx == nil {
@@ -382,7 +278,7 @@ func (h *SQLServerHelper) Discard(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return dhl.ErrNoConn
 	}
 	if h.tx == nil {
@@ -399,7 +295,7 @@ func (h *SQLServerHelper) Save(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return fmt.Errorf("save: %w", dhl.ErrNoConn)
 	}
 	if h.tx == nil {
@@ -419,7 +315,7 @@ func (h *SQLServerHelper) Query(querySql string, args ...interface{}) (dhl.Rows,
 	if h.err != nil {
 		return nil, h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return nil, fmt.Errorf("query: %w", dhl.ErrNoConn)
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -457,7 +353,7 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 	default:
 		return fmt.Errorf("queryarray: %w", dhl.ErrArrayTypeNotSupported)
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -755,7 +651,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...interface{}) dhl.Row
 	if h.err != nil {
 		return nil
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return nil
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -778,7 +674,7 @@ func (h *SQLServerHelper) Exec(querySql string, args ...interface{}) (int64, err
 	if h.err != nil {
 		return 0, h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return 0, fmt.Errorf("exec: %w", dhl.ErrNoConn)
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -807,7 +703,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 	if h.err != nil {
 		return false, h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return false, nil
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -897,7 +793,7 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	if h.err != nil {
 		return false, h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.conn == nil {
 		return false, fmt.Errorf("verify: %w", dhl.ErrNoConn)
 	}
 	tableNameWithParameters := tableName
