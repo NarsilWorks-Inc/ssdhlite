@@ -135,7 +135,8 @@ func (h *SQLServerHelper) Begin() error {
 		return h.err
 	}
 	if h.db == nil || h.conn == nil {
-		return dhl.ErrNoConn
+		h.err = fmt.Errorf("begin: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	if h.tx == nil {
 		h.tx, h.err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
@@ -161,6 +162,11 @@ func (h *SQLServerHelper) Commit() error {
 		return nil
 	}
 
+	// If there is an error, we give the control to rollback
+	if h.err != nil {
+		return h.Rollback()
+	}
+
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
@@ -181,16 +187,19 @@ func (h *SQLServerHelper) Commit() error {
 
 	// Ensure DB, connection, and transaction are valid before committing
 	if h.conn == nil {
-		return fmt.Errorf("commit: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("commit: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	if h.tx == nil {
-		return fmt.Errorf("commit: %w", dhl.ErrNoTx)
+		h.err = fmt.Errorf("commit: %w", dhl.ErrNoTx)
+		return h.err
 	}
 
 	// Commit the outermost transaction
 	if h.trCnt == 1 {
-		if err := h.tx.Commit(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			return fmt.Errorf("commit: %w", err)
+		if h.err = h.tx.Commit(); h.err != nil && !errors.Is(h.err, sql.ErrTxDone) {
+			h.err = fmt.Errorf("commit: %w", h.err)
+			return h.err
 		}
 	}
 
@@ -210,8 +219,9 @@ func (h *SQLServerHelper) Rollback() error {
 		return nil
 	}
 
-	h.rw.Lock()
-	defer h.rw.Unlock()
+	if h.err != nil {
+		return h.rollbk()
+	}
 
 	// Handle nested transactions
 	// If the value of the map is zero, we move to the earlier transaction
@@ -231,28 +241,39 @@ func (h *SQLServerHelper) Rollback() error {
 
 	// If this is the outermost transaction, rollback the transaction
 	// If the queries resulted an error, we also roll it back
-	if h.trCnt == 1 || h.err != nil {
-		// Ensure DB, connection, and transaction are valid before rolling back
-		if h.conn == nil {
-			return fmt.Errorf("rollback: %w", dhl.ErrNoConn)
-		}
-		if h.tx == nil {
-			return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
-		}
-
-		// Perform rollback
-		if err := h.tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			return fmt.Errorf("rollback: %w", err)
-		}
-
-		// Reset all transaction state after rollback
-		h.tx = nil
-		h.trCnt = 0
-		h.txInstIdx = 0
-		h.txInst = make(map[uint8]uint8)
-		return nil
+	if h.trCnt == 1 {
+		return h.rollbk()
 	}
 
+	return nil
+}
+
+func (h *SQLServerHelper) rollbk() error {
+
+	// Ensure DB, connection, and transaction are valid before rolling back
+	if h.conn == nil {
+		h.err = fmt.Errorf("rollback: %w", dhl.ErrNoConn)
+		return h.err
+	}
+	if h.tx == nil {
+		h.err = fmt.Errorf("rollback: %w", dhl.ErrNoTx)
+		return h.err
+	}
+
+	// Perform rollback
+	if h.err = h.tx.Rollback(); h.err != nil && !errors.Is(h.err, sql.ErrTxDone) {
+		h.err = fmt.Errorf("rollback: %w", h.err)
+	}
+
+	// Reset all transaction state after rollback
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
+	h.tx = nil
+	h.trCnt = 0
+	h.txInstIdx = 0
+	h.err = nil
+	h.txInst = make(map[uint8]uint8)
 	return nil
 }
 
@@ -262,15 +283,21 @@ func (h *SQLServerHelper) Mark(name string) error {
 		return h.err
 	}
 	if h.conn == nil {
-		return fmt.Errorf("mark: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("mark: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	if h.tx == nil {
-		return fmt.Errorf("rollback: %w", dhl.ErrNoTx)
+		h.err = fmt.Errorf("rollback: %w", dhl.ErrNoTx)
+		return h.err
 	}
 	if h.trCnt > 0 {
 		_, h.err = h.tx.ExecContext(h.ctx, `SAVE TRAN sp_`+name+`;`)
+		if h.err != nil {
+			h.err = fmt.Errorf("mark: %w", h.err)
+			return h.err
+		}
 	}
-	return fmt.Errorf("mark: %w", h.err)
+	return nil
 }
 
 // Discard a savepoint
@@ -279,15 +306,21 @@ func (h *SQLServerHelper) Discard(name string) error {
 		return h.err
 	}
 	if h.conn == nil {
-		return dhl.ErrNoConn
+		h.err = fmt.Errorf("discard: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	if h.tx == nil {
-		return dhl.ErrNoTx
+		h.err = fmt.Errorf("discard: %w", dhl.ErrNoTx)
+		return h.err
 	}
 	if h.trCnt > 0 {
 		_, h.err = h.tx.ExecContext(h.ctx, `ROLLBACK TRAN sp_`+name+`;`)
+		if h.err != nil {
+			h.err = fmt.Errorf("discard: %w", h.err)
+			return h.err
+		}
 	}
-	return fmt.Errorf("discard: %w", h.err)
+	return nil
 }
 
 // Save a savepoint
@@ -296,15 +329,21 @@ func (h *SQLServerHelper) Save(name string) error {
 		return h.err
 	}
 	if h.conn == nil {
-		return fmt.Errorf("save: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("save: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	if h.tx == nil {
-		return fmt.Errorf("save: %w", dhl.ErrNoTx)
+		h.err = fmt.Errorf("save: %w", dhl.ErrNoTx)
+		return h.err
 	}
 	if h.trCnt > 0 {
 		_, h.err = h.tx.ExecContext(h.ctx, `COMMIT TRAN sp_`+name+`;`)
+		if h.err != nil {
+			h.err = fmt.Errorf("save: %w", h.err)
+			return h.err
+		}
 	}
-	return fmt.Errorf("save: %w", h.err)
+	return nil
 }
 
 // Query retrieves rows from database
@@ -316,7 +355,8 @@ func (h *SQLServerHelper) Query(querySql string, args ...interface{}) (dhl.Rows,
 		return nil, h.err
 	}
 	if h.conn == nil {
-		return nil, fmt.Errorf("query: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("query: %w", dhl.ErrNoConn)
+		return nil, h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
@@ -329,10 +369,12 @@ func (h *SQLServerHelper) Query(querySql string, args ...interface{}) (dhl.Rows,
 		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
-		return nil, fmt.Errorf("query: %w", h.err)
+		h.err = fmt.Errorf("query: %w", h.err)
+		return nil, h.err
 	}
 	if sqr == nil {
-		return nil, fmt.Errorf("query: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("query: %w", dhl.ErrNoConn)
+		return nil, h.err
 	}
 	return NewSQLServerRows(sqr), nil
 }
@@ -351,10 +393,12 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 	case *[]string, *[]int, *[]int8, *[]int16, *[]int32, *[]int64, *[]bool, *[]float32, *[]float64:
 	case *[]time.Time:
 	default:
-		return fmt.Errorf("queryarray: %w", dhl.ErrArrayTypeNotSupported)
+		h.err = fmt.Errorf("queryarray: %w", dhl.ErrArrayTypeNotSupported)
+		return h.err
 	}
 	if h.conn == nil {
-		return fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
@@ -367,10 +411,12 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
-		return fmt.Errorf("queryarray: %w", h.err)
+		h.err = fmt.Errorf("queryarray: %w", h.err)
+		return h.err
 	}
 	if sqr == nil {
-		return fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
+		return h.err
 	}
 	defer sqr.Close()
 
@@ -383,12 +429,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, "")
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]int:
@@ -399,12 +447,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]int8:
@@ -415,12 +465,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]int16:
@@ -431,12 +483,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]int32:
@@ -447,12 +501,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]int64:
@@ -463,12 +519,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]bool:
@@ -479,12 +537,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, false)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]float32:
@@ -495,12 +555,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]float64:
@@ -511,12 +573,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, 0)
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	case *[]time.Time:
@@ -527,12 +591,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out interface{}, args ...i
 		for sqr.Next() {
 			*t = append(*t, time.Time{})
 			if h.err = sqr.Scan(&(*t)[idx]); h.err != nil {
-				return fmt.Errorf("queryarray: %w", h.err)
+				h.err = fmt.Errorf("queryarray: %w", h.err)
+				return h.err
 			}
 			idx++
 		}
 		if h.err = sqr.Err(); h.err != nil {
-			return fmt.Errorf("queryarray: %w", h.err)
+			h.err = fmt.Errorf("queryarray: %w", h.err)
+			return h.err
 		}
 		_ = t
 	}
@@ -709,6 +775,10 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sqlWithParams = dhl.ReplaceQueryParamMarker(sqlWithParams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	sqlWithParams = dhl.InterpolateTable(sqlWithParams, h.dbi.Schema)
+	if strings.HasSuffix(sqlWithParams, `;`) {
+		h.err = errors.New(`semicolons are not allowed at the end of this query`)
+		return false, h.err
+	}
 	args = refineParameters(args...)
 	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 	if h.tx != nil {
@@ -717,7 +787,8 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 			return false, nil
 		}
 		if h.err != nil {
-			return false, fmt.Errorf("exists: %w", h.err)
+			h.err = fmt.Errorf("exists: %w", h.err)
+			return false, h.err
 		}
 		return cnt == 1, nil
 	}
@@ -726,7 +797,8 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 		return false, nil
 	}
 	if h.err != nil {
-		return false, fmt.Errorf("exists: %w", h.err)
+		h.err = fmt.Errorf("exists: %w", h.err)
+		return false, h.err
 	}
 	return cnt == 1, nil
 }
@@ -742,18 +814,21 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		return h.err
 	}
 	if next == nil {
-		return fmt.Errorf("next: %w", dhl.ErrVarMustBeInit)
+		h.err = fmt.Errorf("next: %w", dhl.ErrVarMustBeInit)
+		return h.err
 	}
 	// if the database config has set a sequence generator, this will use it
 	sg := h.dbi.SequenceGenerator
 	if sg != nil {
 		if sg.NamePlaceHolder == "" {
-			return errors.New(`next: name place holder should be provided. ` +
+			h.err = errors.New(`next: name place holder should be provided. ` +
 				`Set name place holder in {placeholder} format. ` +
 				`Place holder name should also be present in the upsert or select query`)
+			return h.err
 		}
 		if sg.ResultQuery == "" {
-			return errors.New(`next: result query must be provided`)
+			h.err = errors.New(`next: result query must be provided`)
+			return h.err
 		}
 		// Upsert is usually an insert or an update, so we execute it.
 		// It is optional when all queries are set in the result query.
@@ -763,18 +838,21 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			sql = strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial)
 			affr, h.err = h.Exec(sql)
 			if h.err != nil {
-				return fmt.Errorf("next: %w", h.err)
+				h.err = fmt.Errorf("next: %w", h.err)
+				return h.err
 			}
 		}
 		// in the event that the upsert alters the affr variable to 0, we return an error
 		if affr == 0 {
-			return errors.New(`next: upsert query did not insert or update any records`)
+			h.err = errors.New(`next: upsert query did not insert or update any records`)
+			return h.err
 		}
 		// result query needs a single scalar value to be returned
 		sql = strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial)
 		h.err = h.QueryRow(sql).Scan(next)
 		if h.err != nil {
-			return fmt.Errorf("next: %w", h.err)
+			h.err = fmt.Errorf("next: %w", h.err)
+			return h.err
 		}
 		return nil
 	}
@@ -783,7 +861,8 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	sql = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
 	h.err = h.QueryRow(sql).Scan(next)
 	if h.err != nil {
-		return fmt.Errorf("next: %w", h.err)
+		h.err = fmt.Errorf("next: %w", h.err)
+		return h.err
 	}
 	return nil
 }
@@ -831,8 +910,10 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	h.err = h.QueryRow(sql, args...).Scan(&exists)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
-			return false, fmt.Errorf("verify: %w", h.err)
+			h.err = fmt.Errorf("verify: %w", h.err)
+			return false, h.err
 		}
+		h.err = nil
 		return false, nil
 	}
 
@@ -873,6 +954,7 @@ func (h *SQLServerHelper) Now() *time.Time {
 	h.err = h.QueryRow(`SELECT GETDATE();`).Scan(&tm)
 	if h.err != nil {
 		tm = time.Now()
+		h.err = nil
 		return &tm
 	}
 	return &tm
@@ -884,6 +966,7 @@ func (h *SQLServerHelper) NowUTC() *time.Time {
 	h.err = h.QueryRow(`SELECT GETUTCDATE();`).Scan(&tm)
 	if h.err != nil {
 		tm = time.Now().UTC()
+		h.err = nil
 		return &tm
 	}
 	return &tm
