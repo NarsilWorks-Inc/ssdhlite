@@ -775,6 +775,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	sqlWithParams = dhl.ReplaceQueryParamMarker(sqlWithParams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	sqlWithParams = dhl.InterpolateTable(sqlWithParams, h.dbi.Schema)
+	sqlWithParams = strings.TrimSpace(sqlWithParams)
 	if strings.HasSuffix(sqlWithParams, `;`) {
 		h.err = errors.New(`semicolons are not allowed at the end of this query`)
 		return false, h.err
@@ -784,6 +785,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 	if h.tx != nil {
 		h.err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
 		if errors.Is(h.err, dhl.ErrNoRows) {
+			h.err = nil
 			return false, nil
 		}
 		if h.err != nil {
@@ -794,6 +796,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...interface{}) (boo
 	}
 	h.err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
 	if errors.Is(h.err, dhl.ErrNoRows) {
+		h.err = nil
 		return false, nil
 	}
 	if h.err != nil {
