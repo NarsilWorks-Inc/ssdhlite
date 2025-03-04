@@ -1,0 +1,95 @@
+{
+    "DefaultDatabaseID": "DEFAULT",
+    "Flags" : [
+        {"Key": "debug", "Value": "true"},
+        {"Key":"helperid", "Value": "ssdhlite"}
+    ],
+    "Databases" : [
+        {
+            "ID" : "DEFAULT",
+            "Schema": "public",
+            "ConnectionStringX" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
+            "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPCORE&connection+timeout=30",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
+        },
+        {
+            "ID" : "OFFICE",
+            "Schema": "public",
+            "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@THANOS?database=NOTIFICATIONDB&connection+timeout=30",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
+        },
+        {
+            "ID" : "APPSHUB",
+            "Schema": "pub",
+            "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@HULK?database=APPSHUB&connection+timeout=30&encrypt=disable&app+name=appshub",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
+        },
+        {
+            "ID" : "APPSHUB-LENOVO-LINUX",
+            "Schema": "pub",
+            "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPCORE&connection+timeout=30&encrypt=disable&app+name=appshub",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
+        },
+        {
+            "ID" : "TESTDB-HOME",
+            "Schema": "dbo",
+            "ConnectionString" : "sqlserver://sa:password101@localhost?database=TESTDB&connection+timeout=30&encrypt=disable&app+name=testdb",
+            "DriverName" : "sqlserver",
+            "InterpolateTables": true,
+            "ParameterPlaceholder": "@p",
+            "ParameterInSequence": true,
+            "StorageType": "SERVER",
+            "GroupID": "DEFAULT",
+            "UTCDateFunction":"GETUTCDATE()",
+            "SequenceGeneratorXX" : {
+                "UpsertQuery" : "",
+                "ResultQuery" : "DECLARE @surrogatekey INT; EXEC dbo.snfGetNextNumber '{SequenceName}', @surrogatekey OUTPUT; SELECT @surrogatekey;",
+                "NamePlaceHolder": "{SequenceName}"
+            }
+        }
+    ]
+}

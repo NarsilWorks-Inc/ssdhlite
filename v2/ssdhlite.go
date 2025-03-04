@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	dhl "github.com/NarsilWorks-Inc/datahelperlite"
+	dhl "github.com/NarsilWorks-Inc/datahelperlite/v2"
 	mssql "github.com/denisenkom/go-mssqldb"
-	cfg "github.com/eaglebush/config"
+	dn "github.com/eaglebush/datainfo"
 )
 
 // SQLServerHelper implements DataHelperLite
@@ -20,7 +20,7 @@ type SQLServerHelper struct {
 	db   *sql.DB
 	tx   *sql.Tx
 	conn *sql.Conn
-	dbi  *cfg.DatabaseInfo
+	dbi  *dn.DataInfo
 	ctx  context.Context
 	trCnt,
 	reuseCnt,
@@ -44,7 +44,7 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 }
 
 // Open a new connection
-func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
+func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 
 	// If Sql handle and connection is valid
 	if h.db != nil && h.conn != nil {
@@ -57,6 +57,9 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.err = nil
 	h.txInst = make(map[uint8]uint8)
 	h.txInstIdx = 0
+	if di.ConnectionString == nil || *di.ConnectionString == "" {
+		h.err = fmt.Errorf("open: %w", dhl.ErrNoConnStr)
+	}
 	h.dbi = di
 	if ctx == nil {
 		ctx = context.Background()
@@ -64,7 +67,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	h.ctx = ctx
 
 	if h.db == nil {
-		h.db, h.err = sql.Open(`sqlserver`, di.ConnectionString)
+		h.db, h.err = sql.Open(`sqlserver`, *di.ConnectionString)
 		if h.err != nil {
 			return fmt.Errorf("open: %w", h.err)
 		}
@@ -349,9 +352,6 @@ func (h *SQLServerHelper) Save(name string) error {
 
 // Query retrieves rows from database
 func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) {
-	var (
-		sqr *sql.Rows
-	)
 	if h.err != nil {
 		return nil, h.err
 	}
@@ -359,10 +359,29 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 		h.err = fmt.Errorf("query: %w", dhl.ErrNoConn)
 		return nil, h.err
 	}
+
+	var (
+		sqr *sql.Rows
+		placeholder,
+		schema string
+		paraminseq bool
+	)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
@@ -385,7 +404,22 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 
 	var (
 		sqr *sql.Rows
+		placeholder,
+		schema string
+		paraminseq bool
 	)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	if h.err != nil {
 		return h.err
 	}
@@ -402,9 +436,9 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 		return h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
@@ -722,9 +756,26 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 		h.err = fmt.Errorf("queryrow: %w", dhl.ErrNoConn)
 		return nil
 	}
+	var (
+		placeholder,
+		schema string
+		paraminseq bool
+	)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
+	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		return NewSQLServerRow(h.tx.QueryRowContext(h.ctx, querySql, args...))
@@ -743,11 +794,30 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 		return 0, h.err
 	}
 	if h.conn == nil {
-		return 0, fmt.Errorf("exec: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("exec: %w", dhl.ErrNoConn)
+		return 0, h.err
 	}
+
+	var (
+		placeholder,
+		schema string
+		paraminseq bool
+	)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
+	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sq, h.err = h.tx.ExecContext(h.ctx, querySql, args...)
@@ -766,7 +836,6 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 
 	var (
 		cnt int
-		sql string
 	)
 	if h.err != nil {
 		return false, h.err
@@ -774,9 +843,28 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	if h.conn == nil {
 		return false, nil
 	}
+
+	var (
+		sql,
+		placeholder,
+		schema string
+		paraminseq bool
+	)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	sqlWithParams = dhl.ReplaceQueryParamMarker(sqlWithParams, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	sqlWithParams = dhl.InterpolateTable(sqlWithParams, h.dbi.Schema)
+	sqlWithParams = dhl.ReplaceQueryParamMarker(sqlWithParams, paraminseq, placeholder)
+	sqlWithParams = dhl.InterpolateTable(sqlWithParams, schema)
 	sqlWithParams = strings.TrimSpace(sqlWithParams)
 	if strings.HasSuffix(sqlWithParams, `;`) {
 		h.err = errors.New(`semicolons are not allowed at the end of this query`)
@@ -880,41 +968,60 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	if h.conn == nil {
 		return false, fmt.Errorf("verify: %w", dhl.ErrNoConn)
 	}
+
+	var (
+		andstr, sql,
+		placeholder,
+		schema, ph string
+		paraminseq, exists bool
+		i                  int
+	)
+
+	args := make([]any, 0)
+
+	placeholder = "?"
+	if h.dbi.ParameterPlaceHolder != nil && *h.dbi.ParameterPlaceHolder != "" {
+		placeholder = *h.dbi.ParameterPlaceHolder
+	}
+	if h.dbi.ParameterInSequence != nil {
+		paraminseq = *h.dbi.ParameterInSequence
+	}
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
+	}
+
 	tableNameWithParameters := tableName
-	args := make([]any, len(values))
-	i := 0
-	andstr := ""
-	placeholder := h.dbi.ParameterPlaceholder
 	if len(values) > 0 {
 		tableNameWithParameters += ` WHERE `
 	}
+
 	for _, v := range values {
 		if isInterfaceNil(v.Value) {
 			v.Operator = " IS NULL"
-			placeholder = ""
+			ph = ""
 		} else {
 			// If there is no operator, we default to "="
 			if v.Operator == "" {
 				v.Operator = "="
 			}
-			if h.dbi.ParameterInSequence {
-				placeholder = h.dbi.ParameterPlaceholder + strconv.Itoa(i+1)
+			if paraminseq {
+				ph = placeholder + strconv.Itoa(i+1)
 			}
 			args = append(args, v.Value)
 			i++
 		}
 
-		tableNameWithParameters += andstr + v.Name + v.Operator + placeholder
+		tableNameWithParameters += andstr + v.Name + v.Operator + ph
 		andstr = " AND "
 	}
 
-	var (
-		sql    string
-		exists bool
-	)
-
 	args = refineParameters(args...)
-	sql = `SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM ` + tableNameWithParameters + `) = 1 THEN 1 ELSE 0 END AS BIT);`
+	tableNameWithParameters = strings.TrimSpace(tableNameWithParameters)
+	if strings.HasSuffix(tableNameWithParameters, `;`) {
+		tableNameWithParameters, _ = strings.CutSuffix(tableNameWithParameters, `;`)
+	}
+
+	sql = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, schema)
 	h.err = h.QueryRow(sql, args...).Scan(&exists)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
@@ -933,13 +1040,13 @@ func (h *SQLServerHelper) Escape(fv string) string {
 	if len(fv) == 0 {
 		return ""
 	}
-	senc := *h.dbi.StringEnclosingChar
-	sesc := *h.dbi.StringEscapeChar
-	if len(senc) == 0 {
-		senc = `'`
+	senc := `'`
+	sesc := `\`
+	if h.dbi.StringEnclosingChar != nil && *h.dbi.StringEnclosingChar != "" {
+		senc = *h.dbi.StringEnclosingChar
 	}
-	if len(sesc) == 0 {
-		sesc = `'`
+	if h.dbi.StringEscapeChar != nil && *h.dbi.StringEscapeChar != "" {
+		sesc = *h.dbi.StringEscapeChar
 	}
 	return strings.ReplaceAll(fv, senc, sesc+sesc)
 }
