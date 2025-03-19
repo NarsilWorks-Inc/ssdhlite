@@ -59,6 +59,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 	h.txInstIdx = 0
 	if di.ConnectionString == nil || *di.ConnectionString == "" {
 		h.err = fmt.Errorf("open: %w", dhl.ErrNoConnStr)
+		return h.err
 	}
 	h.dbi = di
 	if ctx == nil {
@@ -88,7 +89,8 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 	if h.conn == nil {
 		h.conn, h.err = h.db.Conn(h.ctx)
 		if h.err != nil {
-			return fmt.Errorf("open: %w", h.err)
+			h.err = fmt.Errorf("open: %w", h.err)
+			return h.err
 		}
 	}
 
@@ -401,6 +403,9 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 
 // QueryArray puts the single column result to an output array
 func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) error {
+	if h.err != nil {
+		return h.err
+	}
 
 	var (
 		sqr *sql.Rows
@@ -420,10 +425,6 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 		schema = *h.dbi.Schema
 	}
 
-	if h.err != nil {
-		return h.err
-	}
-
 	switch out.(type) {
 	case *[]string, *[]int, *[]int8, *[]int16, *[]int32, *[]int64, *[]bool, *[]float32, *[]float64:
 	case *[]time.Time:
@@ -436,9 +437,8 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 		return h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(querySql, schema)
+	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
@@ -774,8 +774,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	}
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
-	querySql = dhl.InterpolateTable(querySql, schema)
+	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		return NewSQLServerRow(h.tx.QueryRowContext(h.ctx, querySql, args...))
@@ -874,24 +873,22 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 	if h.tx != nil {
 		h.err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
-		if errors.Is(h.err, dhl.ErrNoRows) {
-			h.err = nil
-			return false, nil
-		}
 		if h.err != nil {
-			h.err = fmt.Errorf("exists: %w", h.err)
-			return false, h.err
+			if !errors.Is(h.err, dhl.ErrNoRows) {
+				h.err = fmt.Errorf("exists: %w", h.err)
+				return false, h.err
+			}
+			h.err = nil
 		}
 		return cnt == 1, nil
 	}
 	h.err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
-	if errors.Is(h.err, dhl.ErrNoRows) {
-		h.err = nil
-		return false, nil
-	}
 	if h.err != nil {
-		h.err = fmt.Errorf("exists: %w", h.err)
-		return false, h.err
+		if !errors.Is(h.err, dhl.ErrNoRows) {
+			h.err = fmt.Errorf("exists: %w", h.err)
+			return false, h.err
+		}
+		h.err = nil
 	}
 	return cnt == 1, nil
 }

@@ -66,7 +66,8 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	if h.db == nil {
 		h.db, h.err = sql.Open(`sqlserver`, di.ConnectionString)
 		if h.err != nil {
-			return fmt.Errorf("open: %w", h.err)
+			h.err = fmt.Errorf("open: %w", h.err)
+			return h.err
 		}
 		if di.MaxOpenConnection != nil {
 			h.db.SetMaxOpenConns(*di.MaxOpenConnection)
@@ -85,7 +86,8 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	if h.conn == nil {
 		h.conn, h.err = h.db.Conn(h.ctx)
 		if h.err != nil {
-			return fmt.Errorf("open: %w", h.err)
+			h.err = fmt.Errorf("open: %w", h.err)
+			return h.err
 		}
 	}
 
@@ -360,9 +362,8 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 		return nil, h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder), h.dbi.Schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
@@ -723,8 +724,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 		return nil
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder), h.dbi.Schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		return NewSQLServerRow(h.tx.QueryRowContext(h.ctx, querySql, args...))
@@ -743,11 +743,11 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 		return 0, h.err
 	}
 	if h.conn == nil {
-		return 0, fmt.Errorf("exec: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("exec: %w", dhl.ErrNoConn)
+		return 0, h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder), h.dbi.Schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
 		sq, h.err = h.tx.ExecContext(h.ctx, querySql, args...)
@@ -786,25 +786,25 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 	if h.tx != nil {
 		h.err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
-		if errors.Is(h.err, dhl.ErrNoRows) {
-			h.err = nil
-			return false, nil
-		}
 		if h.err != nil {
-			h.err = fmt.Errorf("exists: %w", h.err)
+			if !errors.Is(h.err, dhl.ErrNoRows) {
+				h.err = fmt.Errorf("exists: %w", h.err)
+				return false, h.err
+			}
+			h.err = nil
 			return false, h.err
 		}
 		return cnt == 1, nil
 	}
 	h.err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
-	if errors.Is(h.err, dhl.ErrNoRows) {
-		h.err = nil
-		return false, nil
-	}
 	if h.err != nil {
-		h.err = fmt.Errorf("exists: %w", h.err)
-		return false, h.err
+		if errors.Is(h.err, dhl.ErrNoRows) {
+			h.err = fmt.Errorf("exists: %w", h.err)
+			return false, h.err
+		}
+		h.err = nil
 	}
+
 	return cnt == 1, nil
 }
 
@@ -924,7 +924,7 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	)
 
 	args = refineParameters(args...)
-	sql = `SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM ` + tableNameWithParameters + `) = 1 THEN 1 ELSE 0 END AS BIT);`
+	sql = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, h.dbi.Schema)
 	h.err = h.QueryRow(sql, args...).Scan(&exists)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
