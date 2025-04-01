@@ -17,7 +17,7 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	db   *sql.DB
+	pool *sql.DB
 	tx   *sql.Tx
 	conn *sql.Conn
 	dbi  *cfg.DatabaseInfo
@@ -47,7 +47,7 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
 
 	// If Sql handle and connection is valid
-	if h.db != nil && h.conn != nil {
+	if h.pool != nil && h.conn != nil {
 		h.rw.Lock()
 		h.reuseCnt++
 		h.rw.Unlock()
@@ -63,28 +63,28 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	}
 	h.ctx = ctx
 
-	if h.db == nil {
-		h.db, h.err = sql.Open(`sqlserver`, di.ConnectionString)
+	if h.pool == nil {
+		h.pool, h.err = sql.Open(`sqlserver`, di.ConnectionString)
 		if h.err != nil {
 			h.err = fmt.Errorf("open: %w", h.err)
 			return h.err
 		}
 		if di.MaxOpenConnection != nil {
-			h.db.SetMaxOpenConns(*di.MaxOpenConnection)
+			h.pool.SetMaxOpenConns(*di.MaxOpenConnection)
 		}
 		if di.MaxIdleConnection != nil {
-			h.db.SetMaxIdleConns(*di.MaxIdleConnection)
+			h.pool.SetMaxIdleConns(*di.MaxIdleConnection)
 		}
 		if di.MaxConnectionLifetime != nil {
-			h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
+			h.pool.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
 		}
 		if di.MaxConnectionIdleTime != nil {
-			h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
+			h.pool.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
 		}
 	}
 
 	if h.conn == nil {
-		h.conn, h.err = h.db.Conn(h.ctx)
+		h.conn, h.err = h.pool.Conn(h.ctx)
 		if h.err != nil {
 			h.err = fmt.Errorf("open: %w", h.err)
 			return h.err
@@ -136,7 +136,7 @@ func (h *SQLServerHelper) Begin() error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.db == nil || h.conn == nil {
+	if h.pool == nil || h.conn == nil {
 		h.err = fmt.Errorf("begin: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -812,8 +812,9 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 func (h *SQLServerHelper) Next(serial string, next *int64) error {
 
 	var (
-		sql  string
+		sqlq string
 		affr int64
+		sqr  sql.Result
 	)
 	if h.err != nil {
 		return h.err
@@ -840,12 +841,17 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		// affr (affected rows) must be at least 1 to proceed
 		affr = 1
 		if sg.UpsertQuery != "" {
-			sql = strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial)
-			affr, h.err = h.Exec(sql)
+			sqlq = strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial)
+			if h.tx != nil {
+				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
+			} else {
+				sqr, h.err = h.conn.ExecContext(h.ctx, sqlq)
+			}
 			if h.err != nil {
 				h.err = fmt.Errorf("next: %w", h.err)
 				return h.err
 			}
+			affr, _ = sqr.RowsAffected()
 		}
 		// in the event that the upsert alters the affr variable to 0, we return an error
 		if affr == 0 {
@@ -853,18 +859,64 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			return h.err
 		}
 		// result query needs a single scalar value to be returned
-		sql = strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial)
-		h.err = h.QueryRow(sql).Scan(next)
+		sqlq = strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial)
+		if h.tx != nil {
+			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
+		} else {
+			h.err = h.conn.QueryRowContext(h.ctx, sqlq).Scan(next)
+		}
+		if h.err != nil {
+			h.err = fmt.Errorf("next: %w", h.err)
+			return h.err
+		}
+
+		return nil
+	}
+
+	// If there are no sequence configuration specified, we will create a and use a sequence (SQL Server 2012 and later).
+	// The format of the sequence should be <schema>.<sequence name>.
+	// Dots are not allowed in the sequence name, therefore it must be converted to
+	// another character, for example an underscore. If there is a dot specified
+	// in the serial, it would be parsed as the schema.
+	sch := "dbo"
+	if h.dbi.Schema != "" {
+		sch = h.dbi.Schema
+	}
+	sln := serial
+	if idx := strings.Index(serial, "."); idx != -1 {
+		sch = serial[:idx]
+		sln = strings.ReplaceAll(serial[idx+1:], ".", "_")
+	}
+
+	seq := fmt.Sprintf(`
+		IF NOT EXISTS(SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'%s.%s') AND type = 'SO')
+		CREATE SEQUENCE %s.%s AS INT
+			START WITH 1
+			INCREMENT BY 1
+			MINVALUE 1
+			MAXVALUE 2147483647
+			CACHE 1;`, sch, sln, sch, sln)
+
+	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
+	if h.tx != nil {
+		_, h.err = h.tx.ExecContext(h.ctx, seq)
+		if h.err != nil {
+			h.err = fmt.Errorf("next: %w", h.err)
+			return h.err
+		}
+		h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		if h.err != nil {
 			h.err = fmt.Errorf("next: %w", h.err)
 			return h.err
 		}
 		return nil
 	}
-
-	// if the sequence generator was not set, we use the sequence (SQL Server 2012 and later)
-	sql = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
-	h.err = h.QueryRow(sql).Scan(next)
+	_, h.err = h.conn.ExecContext(h.ctx, seq)
+	if h.err != nil {
+		h.err = fmt.Errorf("next: %w", h.err)
+		return h.err
+	}
+	h.err = h.conn.QueryRowContext(h.ctx, sqlq).Scan(next)
 	if h.err != nil {
 		h.err = fmt.Errorf("next: %w", h.err)
 		return h.err
