@@ -841,7 +841,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		// affr (affected rows) must be at least 1 to proceed
 		affr = 1
 		if sg.UpsertQuery != "" {
-			sqlq = strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial)
+			sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial), h.dbi.Schema)
 			if h.tx != nil {
 				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
 			} else {
@@ -859,7 +859,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			return h.err
 		}
 		// result query needs a single scalar value to be returned
-		sqlq = strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial)
+		sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial), h.dbi.Schema)
 		if h.tx != nil {
 			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		} else {

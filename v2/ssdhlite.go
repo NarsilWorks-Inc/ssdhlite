@@ -896,9 +896,9 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 // Next gets the next serial number
 func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	var (
-		sqlq string
-		affr int64
-		sqr  sql.Result
+		sqlq, schema string
+		affr         int64
+		sqr          sql.Result
 	)
 	if h.err != nil {
 		return h.err
@@ -907,6 +907,11 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		h.err = fmt.Errorf("next: %w", dhl.ErrVarMustBeInit)
 		return h.err
 	}
+
+	if h.dbi.Schema == nil {
+		schema = "dbo"
+	}
+
 	// if the database config has set a sequence generator, this will use it
 	sg := h.dbi.SequenceGenerator
 	if sg != nil {
@@ -925,7 +930,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		// affr (affected rows) must be at least 1 to proceed
 		affr = 1
 		if sg.UpsertQuery != "" {
-			sqlq = strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial)
+			sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial), schema)
 			if h.tx != nil {
 				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
 			} else {
@@ -943,7 +948,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			return h.err
 		}
 		// result query needs a single scalar value to be returned
-		sqlq = strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial)
+		sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial), schema)
 		if h.tx != nil {
 			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		} else {
