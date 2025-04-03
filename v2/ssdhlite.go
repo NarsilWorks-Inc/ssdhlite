@@ -979,6 +979,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		schema = serial[:idx]
 		sln = strings.ReplaceAll(serial[idx+1:], ".", "_")
 	}
+	sln = "seq_" + sln
 
 	seq := fmt.Sprintf(`
 		IF NOT EXISTS(SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'%s.%s') AND type = 'SO')
