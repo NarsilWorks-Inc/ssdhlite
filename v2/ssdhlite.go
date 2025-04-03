@@ -844,7 +844,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	}
 
 	var (
-		sql,
+		sqlq,
 		placeholder,
 		schema string
 		paraminseq bool
@@ -870,9 +870,9 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		return false, h.err
 	}
 	args = refineParameters(args...)
-	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
+	sqlq = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 	if h.tx != nil {
-		h.err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+		h.err = h.tx.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 		if h.err != nil {
 			if !errors.Is(h.err, dhl.ErrNoRows) {
 				h.err = fmt.Errorf("exists: %w", h.err)
@@ -882,7 +882,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		}
 		return cnt == 1, nil
 	}
-	h.err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+	h.err = h.conn.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("exists: %w", h.err)
@@ -967,13 +967,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	// Dots are not allowed in the sequence name, therefore it must be converted to
 	// another character, for example an underscore. If there is a dot specified
 	// in the serial, it would be parsed as the schema.
-	sch := "dbo"
-	if h.dbi.Schema == nil && *h.dbi.Schema != "" {
-		sch = *h.dbi.Schema
-	}
 	sln := serial
 	if idx := strings.Index(serial, "."); idx != -1 {
-		sch = serial[:idx]
+		schema = serial[:idx]
 		sln = strings.ReplaceAll(serial[idx+1:], ".", "_")
 	}
 
@@ -984,7 +980,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			INCREMENT BY 1
 			MINVALUE 1
 			MAXVALUE 2147483647
-			CACHE 1;`, sch, sln, sch, sln)
+			CACHE 1;`, schema, sln, schema, sln)
 
 	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
 	if h.tx != nil {
@@ -1023,7 +1019,7 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	}
 
 	var (
-		andstr, sql,
+		andstr, sqlq,
 		placeholder,
 		schema, ph string
 		paraminseq, exists bool
@@ -1074,8 +1070,8 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 		tableNameWithParameters, _ = strings.CutSuffix(tableNameWithParameters, `;`)
 	}
 
-	sql = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, schema)
-	h.err = h.QueryRow(sql, args...).Scan(&exists)
+	sqlq = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, schema)
+	h.err = h.QueryRow(sqlq, args...).Scan(&exists)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("verify: %w", h.err)

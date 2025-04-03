@@ -350,7 +350,7 @@ func (h *SQLServerHelper) Save(name string) error {
 }
 
 // Query retrieves rows from database
-func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) {
+func (h *SQLServerHelper) Query(query string, args ...any) (dhl.Rows, error) {
 	var (
 		sqr *sql.Rows
 	)
@@ -363,12 +363,12 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder), h.dbi.Schema)
+	query = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder), h.dbi.Schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
-		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.conn.QueryContext(h.ctx, query, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("query: %w", h.err)
@@ -382,7 +382,7 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 }
 
 // QueryArray puts the single column result to an output array
-func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) error {
+func (h *SQLServerHelper) QueryArray(query string, out any, args ...any) error {
 
 	var (
 		sqr *sql.Rows
@@ -403,14 +403,14 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 		return h.err
 	}
 	// replace question mark (?) parameter with configured query parameter, if there are any
-	querySql = dhl.ReplaceQueryParamMarker(querySql, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
+	query = dhl.ReplaceQueryParamMarker(query, h.dbi.ParameterInSequence, h.dbi.ParameterPlaceholder)
 	// replace tables meant for interpolation {table} for putting the schema
-	querySql = dhl.InterpolateTable(querySql, h.dbi.Schema)
+	query = dhl.InterpolateTable(query, h.dbi.Schema)
 	args = refineParameters(args...)
 	if h.tx != nil {
-		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.tx.QueryContext(h.ctx, query, args...)
 	} else {
-		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.conn.QueryContext(h.ctx, query, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("queryarray: %w", h.err)
@@ -765,8 +765,8 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error) {
 
 	var (
-		cnt int
-		sql string
+		cnt  int
+		sqlq string
 	)
 	if h.err != nil {
 		return false, h.err
@@ -783,9 +783,9 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		return false, h.err
 	}
 	args = refineParameters(args...)
-	sql = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
+	sqlq = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 	if h.tx != nil {
-		h.err = h.tx.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+		h.err = h.tx.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 		if h.err != nil {
 			if !errors.Is(h.err, dhl.ErrNoRows) {
 				h.err = fmt.Errorf("exists: %w", h.err)
@@ -796,7 +796,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		}
 		return cnt == 1, nil
 	}
-	h.err = h.conn.QueryRowContext(h.ctx, sql, args...).Scan(&cnt)
+	h.err = h.conn.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 	if h.err != nil {
 		if errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("exists: %w", h.err)
@@ -812,9 +812,9 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 func (h *SQLServerHelper) Next(serial string, next *int64) error {
 
 	var (
-		sqlq string
-		affr int64
-		sqr  sql.Result
+		sqlq, schema string
+		affr         int64
+		sqr          sql.Result
 	)
 	if h.err != nil {
 		return h.err
@@ -822,6 +822,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	if next == nil {
 		h.err = fmt.Errorf("next: %w", dhl.ErrVarMustBeInit)
 		return h.err
+	}
+	if h.dbi.Schema == "" {
+		schema = "dbo"
 	}
 	// if the database config has set a sequence generator, this will use it
 	sg := h.dbi.SequenceGenerator
@@ -841,7 +844,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		// affr (affected rows) must be at least 1 to proceed
 		affr = 1
 		if sg.UpsertQuery != "" {
-			sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial), h.dbi.Schema)
+			sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial), schema)
 			if h.tx != nil {
 				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
 			} else {
@@ -859,7 +862,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			return h.err
 		}
 		// result query needs a single scalar value to be returned
-		sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial), h.dbi.Schema)
+		sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial), schema)
 		if h.tx != nil {
 			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		} else {
@@ -878,13 +881,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	// Dots are not allowed in the sequence name, therefore it must be converted to
 	// another character, for example an underscore. If there is a dot specified
 	// in the serial, it would be parsed as the schema.
-	sch := "dbo"
-	if h.dbi.Schema != "" {
-		sch = h.dbi.Schema
-	}
 	sln := serial
 	if idx := strings.Index(serial, "."); idx != -1 {
-		sch = serial[:idx]
+		schema = serial[:idx]
 		sln = strings.ReplaceAll(serial[idx+1:], ".", "_")
 	}
 
@@ -895,7 +894,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			INCREMENT BY 1
 			MINVALUE 1
 			MAXVALUE 2147483647
-			CACHE 1;`, sch, sln, sch, sln)
+			CACHE 1;`, schema, sln, schema, sln)
 
 	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
 	if h.tx != nil {
@@ -971,13 +970,13 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	}
 
 	var (
-		sql    string
+		sqlq   string
 		exists bool
 	)
 
 	args = refineParameters(args...)
-	sql = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, h.dbi.Schema)
-	h.err = h.QueryRow(sql, args...).Scan(&exists)
+	sqlq = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, h.dbi.Schema)
+	h.err = h.QueryRow(sqlq, args...).Scan(&exists)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("verify: %w", h.err)
