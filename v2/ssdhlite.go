@@ -376,6 +376,7 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
@@ -421,6 +422,7 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
@@ -769,6 +771,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
@@ -810,6 +813,8 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
@@ -857,6 +862,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
@@ -908,8 +914,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		return h.err
 	}
 
-	if h.dbi.Schema == nil {
-		schema = "dbo"
+	schema = "dbo"
+	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
+		schema = *h.dbi.Schema
 	}
 
 	// if the database config has set a sequence generator, this will use it
@@ -1035,6 +1042,7 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	if h.dbi.ParameterInSequence != nil {
 		paraminseq = *h.dbi.ParameterInSequence
 	}
+	schema = "dbo"
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
