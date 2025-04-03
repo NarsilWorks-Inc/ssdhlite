@@ -990,7 +990,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			MAXVALUE 2147483647
 			CACHE 1;`, schema, sln, schema, sln)
 
-	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s;", h.Escape(serial))
+	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s.%s;", schema, sln)
 	if h.tx != nil {
 		_, h.err = h.tx.ExecContext(h.ctx, seq)
 		if h.err != nil {
