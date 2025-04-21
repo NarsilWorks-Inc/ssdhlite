@@ -123,9 +123,14 @@ func (h *SQLServerHelper) Close() error {
 		return h.err
 	}
 
+	if h.err = h.pool.Close(); h.err != nil {
+		return h.err
+	}
+
 	h.rw.Lock()
 	h.trCnt = 0
 	h.conn = nil
+	h.pool = nil
 	h.err = nil
 	h.rw.Unlock()
 	return nil
