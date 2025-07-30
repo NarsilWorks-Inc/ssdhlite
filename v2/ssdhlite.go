@@ -25,9 +25,11 @@ type SQLServerHelper struct {
 	trCnt,
 	reuseCnt,
 	txInstIdx uint8
-	rw     sync.RWMutex
-	txInst map[uint8]uint8
-	err    error
+	rw                sync.RWMutex
+	txInst            map[uint8]uint8
+	err               error
+	rollbackTriggered bool // 🔧 NEW
+	committed         bool // 🔧 NEW
 }
 
 func init() {
@@ -162,6 +164,8 @@ func (h *SQLServerHelper) Begin() error {
 	h.trCnt++
 	h.txInst[h.trCnt] = 1
 	h.txInstIdx = h.trCnt
+	h.committed = false         // ✅ Reset commit state
+	h.rollbackTriggered = false // ✅ Reset rollback state
 	h.rw.Unlock()
 	return nil
 }
@@ -170,6 +174,10 @@ func (h *SQLServerHelper) Commit() error {
 
 	// Return early if any of the conditions are true
 	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
+		return nil
+	}
+
+	if h.rollbackTriggered || h.committed {
 		return nil
 	}
 
@@ -212,6 +220,7 @@ func (h *SQLServerHelper) Commit() error {
 			h.err = fmt.Errorf("commit: %w", h.err)
 			return h.err
 		}
+		h.committed = true // 🔧 Mark as committed
 	}
 
 	// Reset transaction state after a successful commit
@@ -219,11 +228,15 @@ func (h *SQLServerHelper) Commit() error {
 	h.trCnt = 0
 	h.txInstIdx = 0
 	h.txInst = make(map[uint8]uint8)
-
+	h.rollbackTriggered = false // 🔧 Reset
 	return nil
 }
 
 func (h *SQLServerHelper) Rollback() error {
+	// If already committed, ignore rollback
+	if h.committed {
+		return nil
+	}
 
 	// Return early if any of the conditions are true
 	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
@@ -253,6 +266,7 @@ func (h *SQLServerHelper) Rollback() error {
 	// If this is the outermost transaction, rollback the transaction
 	// If the queries resulted an error, we also roll it back
 	if h.trCnt == 1 {
+		h.rollbackTriggered = true // 🔧 Flag rollback occurred
 		return h.rollbk()
 	}
 
@@ -260,6 +274,9 @@ func (h *SQLServerHelper) Rollback() error {
 }
 
 func (h *SQLServerHelper) rollbk() error {
+	if h.committed {
+		return nil // 🔧 If already committed, skip rollback
+	}
 
 	// Ensure DB, connection, and transaction are valid before rolling back
 	if h.conn == nil {
@@ -270,6 +287,8 @@ func (h *SQLServerHelper) rollbk() error {
 		h.err = fmt.Errorf("rollback: %w", dhl.ErrNoTx)
 		return h.err
 	}
+
+	h.rollbackTriggered = true // 🔧 Mark rollback occurred
 
 	// Perform rollback
 	if h.err = h.tx.Rollback(); h.err != nil && !errors.Is(h.err, sql.ErrTxDone) {
@@ -285,6 +304,8 @@ func (h *SQLServerHelper) rollbk() error {
 	h.txInstIdx = 0
 	h.err = nil
 	h.txInst = make(map[uint8]uint8)
+	h.committed = false         // 🔧 Reset flags
+	h.rollbackTriggered = false // 🔧 Reset flags (rollback is done)
 	return nil
 }
 
