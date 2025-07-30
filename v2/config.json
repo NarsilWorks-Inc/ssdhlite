@@ -6,7 +6,7 @@
     ],
     "Databases" : [
         {
-            "ID" : "DEFAULT",
+            "ID" : "DEFAULTX",
             "Schema": "public",
             "ConnectionStringX" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
             "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPCORE&connection+timeout=30",
@@ -24,7 +24,7 @@
             }
         },
         {
-            "ID" : "OFFICE",
+            "ID" : "DEFAULT",
             "Schema": "public",
             "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@THANOS?database=NOTIFICATIONDB&connection+timeout=30",
             "DriverName" : "sqlserver",
