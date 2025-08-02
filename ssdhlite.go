@@ -17,17 +17,16 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	pool *sql.DB
-	tx   *sql.Tx
-	conn *sql.Conn
-	dbi  *cfg.DatabaseInfo
-	ctx  context.Context
-	trCnt,
-	reuseCnt,
-	txInstIdx uint8
-	rw     sync.RWMutex
-	txInst map[uint8]uint8
-	err    error
+	pool              *sql.DB
+	tx                *sql.Tx
+	conn              *sql.Conn
+	dbi               *cfg.DatabaseInfo
+	ctx               context.Context
+	trCnt, reuseCnt   uint8
+	rw                sync.RWMutex
+	err               error
+	rollbackTriggered bool
+	committed         bool
 }
 
 func init() {
@@ -37,10 +36,7 @@ func init() {
 
 // NewHelper instantiates new helper
 func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
-	return &SQLServerHelper{
-		txInst:    make(map[uint8]uint8),
-		txInstIdx: 0,
-	}
+	return &SQLServerHelper{}
 }
 
 // Open a new connection
@@ -55,8 +51,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error 
 	}
 
 	h.err = nil
-	h.txInst = make(map[uint8]uint8)
-	h.txInstIdx = 0
 	h.dbi = di
 	if ctx == nil {
 		ctx = context.Background()
@@ -153,20 +147,17 @@ func (h *SQLServerHelper) Begin() error {
 		}
 	}
 	// Increment transaction count
-	// The transaction count will serve as the key for the new map value, set to 1
-	// Move the new index to the forward position
 	h.rw.Lock()
 	h.trCnt++
-	h.txInst[h.trCnt] = 1
-	h.txInstIdx = h.trCnt
+	h.committed = false         // ✅ Reset commit state
+	h.rollbackTriggered = false // ✅ Reset rollback state
 	h.rw.Unlock()
 	return nil
 }
 
 func (h *SQLServerHelper) Commit() error {
 
-	// Return early if any of the conditions are true
-	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
+	if h.tx == nil || h.trCnt == 0 || h.rollbackTriggered || h.committed {
 		return nil
 	}
 
@@ -178,18 +169,9 @@ func (h *SQLServerHelper) Commit() error {
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
-	// Check if the current transaction instance is valid
-	if flag := h.txInst[h.txInstIdx]; flag == 0 {
-		h.txInstIdx-- // Move to the previous transaction instance
-		return nil
-	}
-
 	// If the transaction is not the first transaction,
-	// reduce the transaction count and set the current map index value
-	// as processed
 	if h.trCnt > 1 {
 		h.trCnt--
-		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
 		return nil
 	}
 
@@ -212,10 +194,11 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	// Reset transaction state after a successful commit
+	// Mark committed, set transaction to nil and set rollback flag to false
+	h.committed = true
 	h.tx = nil
 	h.trCnt = 0
-	h.txInstIdx = 0
-	h.txInst = make(map[uint8]uint8)
+	h.rollbackTriggered = false
 
 	return nil
 }
@@ -223,7 +206,7 @@ func (h *SQLServerHelper) Commit() error {
 func (h *SQLServerHelper) Rollback() error {
 
 	// Return early if any of the conditions are true
-	if h.tx == nil || h.trCnt == 0 || h.txInstIdx == 0 || len(h.txInst) == 0 {
+	if h.tx == nil || h.trCnt == 0 {
 		return nil
 	}
 
@@ -231,32 +214,22 @@ func (h *SQLServerHelper) Rollback() error {
 		return h.rollbk()
 	}
 
-	// Handle nested transactions
-	// If the value of the map is zero, we move to the earlier transaction
-	if flag := h.txInst[h.txInstIdx]; flag == 0 {
-		h.txInstIdx--
-		return nil
-	}
-
 	// If the transaction is not the first transaction,
 	// reduce the transaction count and set the current map index value
 	// as processed
 	if h.trCnt > 1 {
 		h.trCnt--
-		h.txInst[h.txInstIdx] = 0 // Mark the current transaction as processed
 		return nil
 	}
 
 	// If this is the outermost transaction, rollback the transaction
-	// If the queries resulted an error, we also roll it back
-	if h.trCnt == 1 {
-		return h.rollbk()
-	}
-
-	return nil
+	return h.rollbk()
 }
 
 func (h *SQLServerHelper) rollbk() error {
+	if h.committed {
+		return nil // 🔧 If already committed, skip rollback
+	}
 
 	// Ensure DB, connection, and transaction are valid before rolling back
 	if h.conn == nil {
@@ -268,20 +241,24 @@ func (h *SQLServerHelper) rollbk() error {
 		return h.err
 	}
 
+	h.rw.Lock()
+	h.rollbackTriggered = true // 🔧 Mark rollback occurred
+	h.rw.Unlock()
+
 	// Perform rollback
 	if h.err = h.tx.Rollback(); h.err != nil && !errors.Is(h.err, sql.ErrTxDone) {
 		h.err = fmt.Errorf("rollback: %w", h.err)
+		return h.err
 	}
 
 	// Reset all transaction state after rollback
 	h.rw.Lock()
-	defer h.rw.Unlock()
-
 	h.tx = nil
 	h.trCnt = 0
-	h.txInstIdx = 0
+	h.committed = false         // 🔧 Reset flags
+	h.rollbackTriggered = false // 🔧 Reset flags (rollback is done)
 	h.err = nil
-	h.txInst = make(map[uint8]uint8)
+	h.rw.Unlock()
 	return nil
 }
 

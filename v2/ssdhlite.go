@@ -24,12 +24,10 @@ type SQLServerHelper struct {
 	ctx  context.Context
 	trCnt,
 	reuseCnt uint8
-	//txInstIdx uint8
-	rw sync.RWMutex
-	//txInst            map[uint8]uint8
+	rw                sync.RWMutex
 	err               error
-	rollbackTriggered bool // 🔧 NEW
-	committed         bool // 🔧 NEW
+	rollbackTriggered bool
+	committed         bool
 }
 
 func init() {
@@ -39,10 +37,7 @@ func init() {
 
 // NewHelper instantiates new helper
 func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
-	return &SQLServerHelper{
-		// txInst:    make(map[uint8]uint8),
-		// txInstIdx: 0,
-	}
+	return &SQLServerHelper{}
 }
 
 // Open a new connection
@@ -57,8 +52,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 	}
 
 	h.err = nil
-	// h.txInst = make(map[uint8]uint8)
-	// h.txInstIdx = 0
 	if di.ConnectionString == nil || *di.ConnectionString == "" {
 		h.err = fmt.Errorf("open: %w", dhl.ErrNoConnStr)
 		return h.err
@@ -158,12 +151,8 @@ func (h *SQLServerHelper) Begin() error {
 		}
 	}
 	// Increment transaction count
-	// The transaction count will serve as the key for the new map value, set to 1
-	// Move the new index to the forward position
 	h.rw.Lock()
 	h.trCnt++
-	// h.txInst[h.trCnt] = 1
-	// h.txInstIdx = h.trCnt
 	h.committed = false         // ✅ Reset commit state
 	h.rollbackTriggered = false // ✅ Reset rollback state
 	h.rw.Unlock()
@@ -173,11 +162,7 @@ func (h *SQLServerHelper) Begin() error {
 func (h *SQLServerHelper) Commit() error {
 
 	// Return early if any of the conditions are true
-	if h.tx == nil || h.trCnt == 0 {
-		return nil
-	}
-
-	if h.rollbackTriggered || h.committed {
+	if h.tx == nil || h.trCnt == 0 || h.rollbackTriggered || h.committed  {
 		return nil
 	}
 
