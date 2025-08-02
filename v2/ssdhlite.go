@@ -24,10 +24,10 @@ type SQLServerHelper struct {
 	ctx  context.Context
 	trCnt,
 	reuseCnt uint8
-	rw                sync.RWMutex
-	err               error
-	rollbackTriggered bool
-	committed         bool
+	rw  sync.RWMutex
+	err error
+	rollbackTriggered,
+	committed bool
 }
 
 func init() {
@@ -162,7 +162,7 @@ func (h *SQLServerHelper) Begin() error {
 func (h *SQLServerHelper) Commit() error {
 
 	// Return early if any of the conditions are true
-	if h.tx == nil || h.trCnt == 0 || h.rollbackTriggered || h.committed  {
+	if h.tx == nil || h.trCnt == 0 || h.rollbackTriggered || h.committed {
 		return nil
 	}
 
@@ -200,6 +200,8 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	// Mark committed, set transaction to nil and set rollback flag to false
+	h.tx = nil
+	h.trCnt = 0
 	h.committed = true
 	h.tx = nil
 	h.rollbackTriggered = false
@@ -207,12 +209,7 @@ func (h *SQLServerHelper) Commit() error {
 }
 
 func (h *SQLServerHelper) Rollback() error {
-	if h.tx == nil || h.trCnt == 0 {
-		return nil
-	}
-
-	// If already committed, ignore rollback
-	if h.committed {
+	if h.tx == nil || h.trCnt == 0 || h.committed {
 		return nil
 	}
 
