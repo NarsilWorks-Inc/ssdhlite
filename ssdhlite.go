@@ -798,19 +798,17 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 				return false, h.err
 			}
 			h.err = nil
-			return false, h.err
 		}
 		return cnt == 1, nil
 	}
 	h.err = h.conn.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 	if h.err != nil {
-		if errors.Is(h.err, dhl.ErrNoRows) {
+		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("exists: %w", h.err)
 			return false, h.err
 		}
 		h.err = nil
 	}
-
 	return cnt == 1, nil
 }
 
