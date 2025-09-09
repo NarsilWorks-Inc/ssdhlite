@@ -27,6 +27,7 @@ type SQLServerHelper struct {
 	err               error
 	rollbackTriggered bool
 	committed         bool
+	trnIdMap          map[uint8]bool
 }
 
 func init() {
@@ -126,6 +127,7 @@ func (h *SQLServerHelper) Close() error {
 	h.conn = nil
 	h.pool = nil
 	h.err = nil
+	h.trnIdMap = nil
 	h.rw.Unlock()
 	return nil
 }
@@ -149,8 +151,15 @@ func (h *SQLServerHelper) Begin() error {
 	// Increment transaction count
 	h.rw.Lock()
 	h.trCnt++
-	h.committed = false         // ✅ Reset commit state
-	h.rollbackTriggered = false // ✅ Reset rollback state
+	h.committed = false         // Reset commit state
+	h.rollbackTriggered = false // Reset rollback state
+
+	// Set trn id flag up
+	if h.trnIdMap == nil {
+		h.trnIdMap = make(map[uint8]bool)
+	}
+	h.trnIdMap[h.trCnt] = true
+
 	h.rw.Unlock()
 	return nil
 }
@@ -169,8 +178,15 @@ func (h *SQLServerHelper) Commit() error {
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
-	// If the transaction is not the first transaction,
+	// If the transaction is not the first transaction, reduce trCnt.
+	//
+	// But this becomes a problem when rollback is deferred.
+	// With this trCnt reduced, when rollback was executed later it will
+	// rollback the outer transaction. To solve deferred rollback issue,
+	// we should flag the current trnCnt to false before moving down to the
+	// outer transaction
 	if h.trCnt > 1 {
+		h.trnIdMap[h.trCnt] = false // Turn off current trnCnt flag
 		h.trCnt--
 		return nil
 	}
@@ -198,6 +214,7 @@ func (h *SQLServerHelper) Commit() error {
 	h.committed = true
 	h.tx = nil
 	h.trCnt = 0
+	h.trnIdMap = nil
 	h.rollbackTriggered = false
 
 	return nil
@@ -212,6 +229,11 @@ func (h *SQLServerHelper) Rollback() error {
 
 	if h.err != nil {
 		return h.rollbk()
+	}
+
+	// If trnId's flag was off, return early
+	if !h.trnIdMap[h.trCnt] {
+		return nil
 	}
 
 	// If the transaction is not the first transaction,
@@ -257,6 +279,7 @@ func (h *SQLServerHelper) rollbk() error {
 	h.trCnt = 0
 	h.committed = false         // 🔧 Reset flags
 	h.rollbackTriggered = false // 🔧 Reset flags (rollback is done)
+	h.trnIdMap = nil
 	h.err = nil
 	h.rw.Unlock()
 	return nil
