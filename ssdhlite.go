@@ -157,11 +157,13 @@ func (h *SQLServerHelper) Begin() error {
 	h.rollbackTriggered = false // Reset rollback state
 
 	// Set trn id flag up
-	if h.trnIdMap == nil {
-		h.trnIdMap = make(map[int8]bool)
+	if h.trCnt > 1 {
+		if h.trnIdMap == nil {
+			h.trnIdMap = make(map[int8]bool)
+		}
+		h.lastTrnId++
+		h.trnIdMap[h.lastTrnId] = true
 	}
-	h.lastTrnId = int8(h.trCnt) - 1
-	h.trnIdMap[h.lastTrnId] = true
 
 	return nil
 }
@@ -218,7 +220,6 @@ func (h *SQLServerHelper) Commit() error {
 		// Record the last transaction id (via count) and set the map to false
 		// Then reduce the number of transaction count
 		if h.trnIdMap != nil {
-			h.lastTrnId--
 			h.trnIdMap[h.lastTrnId] = false
 		}
 		h.trCnt--
@@ -277,7 +278,6 @@ func (h *SQLServerHelper) Rollback() error {
 		// Record the last transaction id (via count) and set the map to false
 		// Then reduce the number of transaction count
 		if h.trnIdMap != nil {
-			h.lastTrnId--
 			h.trnIdMap[h.lastTrnId] = false
 		}
 		h.trCnt--
