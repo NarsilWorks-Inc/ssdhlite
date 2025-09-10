@@ -190,7 +190,7 @@ func (h *SQLServerHelper) BeginManually() error {
 	h.trCnt++
 	h.committed = false         // Reset commit state
 	h.rollbackTriggered = false // Reset rollback state
-	h.lastTrnId = -1
+	h.lastTrnId = 0
 	h.trnIdMap = nil
 	return nil
 }
@@ -249,7 +249,7 @@ func (h *SQLServerHelper) Commit() error {
 	h.committed = true
 	h.tx = nil
 	h.trCnt = 0
-	h.lastTrnId = -1
+	h.lastTrnId = 0
 	h.trnIdMap = nil
 	h.rollbackTriggered = false
 	return nil
@@ -268,7 +268,6 @@ func (h *SQLServerHelper) Rollback() error {
 
 	// If trnId's flag was off, return early
 	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
-		h.lastTrnId--
 		return nil
 	}
 
