@@ -208,12 +208,6 @@ func (h *SQLServerHelper) Commit() error {
 	h.rw.Lock()
 	defer h.rw.Unlock()
 
-	// If trnId's flag was off, return early
-	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
-		h.lastTrnId--
-		return nil
-	}
-
 	// If the transaction is not the outermost transaction, reduce transaction count.
 	if h.trCnt > 1 {
 		// If this transaction was called with Begin(), this is a deferred rollback
@@ -267,18 +261,14 @@ func (h *SQLServerHelper) Rollback() error {
 	}
 
 	// If trnId's flag was off, return early
+	// This only applies to deferred rollbacks
 	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
+		h.lastTrnId--
 		return nil
 	}
 
 	// If the transaction is not the outermost transaction, reduce transaction count.
 	if h.trCnt > 1 {
-		// If this transaction was called with Begin(), this is a deferred rollback
-		// Record the last transaction id (via count) and set the map to false
-		// Then reduce the number of transaction count
-		if h.trnIdMap != nil {
-			h.trnIdMap[h.lastTrnId] = false
-		}
 		h.trCnt--
 		return nil
 	}
