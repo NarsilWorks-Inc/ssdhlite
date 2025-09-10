@@ -250,8 +250,6 @@ func (h *SQLServerHelper) Commit() error {
 }
 
 func (h *SQLServerHelper) Rollback() error {
-
-	// Return early if any of the conditions are true
 	if h.tx == nil || h.trCnt == 0 {
 		return nil
 	}
