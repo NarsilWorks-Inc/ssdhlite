@@ -27,8 +27,8 @@ type SQLServerHelper struct {
 	err               error
 	rollbackTriggered bool
 	committed         bool
-	trnIdMap          map[uint8]bool
-	lastTrnId         uint8
+	trnIdMap          map[int8]bool
+	lastTrnId         int8
 }
 
 func init() {
@@ -158,10 +158,10 @@ func (h *SQLServerHelper) Begin() error {
 
 	// Set trn id flag up
 	if h.trnIdMap == nil {
-		h.trnIdMap = make(map[uint8]bool)
+		h.trnIdMap = make(map[int8]bool)
 	}
-	h.trnIdMap[h.trCnt] = true
-	h.lastTrnId = h.trCnt
+	h.lastTrnId = int8(h.trCnt) - 1
+	h.trnIdMap[h.lastTrnId] = true
 
 	return nil
 }
@@ -188,7 +188,7 @@ func (h *SQLServerHelper) BeginManually() error {
 	h.trCnt++
 	h.committed = false         // Reset commit state
 	h.rollbackTriggered = false // Reset rollback state
-	h.lastTrnId = 0
+	h.lastTrnId = -1
 	h.trnIdMap = nil
 	return nil
 }
@@ -208,7 +208,7 @@ func (h *SQLServerHelper) Commit() error {
 
 	// If trnId's flag was off, return early
 	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
-		h.lastTrnId = h.trCnt
+		h.lastTrnId--
 		return nil
 	}
 
@@ -218,7 +218,7 @@ func (h *SQLServerHelper) Commit() error {
 		// Record the last transaction id (via count) and set the map to false
 		// Then reduce the number of transaction count
 		if h.trnIdMap != nil {
-			h.lastTrnId = h.trCnt
+			h.lastTrnId--
 			h.trnIdMap[h.lastTrnId] = false
 		}
 		h.trCnt--
@@ -248,7 +248,7 @@ func (h *SQLServerHelper) Commit() error {
 	h.committed = true
 	h.tx = nil
 	h.trCnt = 0
-	h.lastTrnId = 0
+	h.lastTrnId = -1
 	h.trnIdMap = nil
 	h.rollbackTriggered = false
 	return nil
@@ -267,7 +267,7 @@ func (h *SQLServerHelper) Rollback() error {
 
 	// If trnId's flag was off, return early
 	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
-		h.lastTrnId = h.trCnt
+		h.lastTrnId--
 		return nil
 	}
 
@@ -277,7 +277,7 @@ func (h *SQLServerHelper) Rollback() error {
 		// Record the last transaction id (via count) and set the map to false
 		// Then reduce the number of transaction count
 		if h.trnIdMap != nil {
-			h.lastTrnId = h.trCnt
+			h.lastTrnId--
 			h.trnIdMap[h.lastTrnId] = false
 		}
 		h.trCnt--
