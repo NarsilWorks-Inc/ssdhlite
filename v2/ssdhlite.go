@@ -163,6 +163,7 @@ func (h *SQLServerHelper) Begin() error {
 		h.trnIdMap = make(map[uint8]bool)
 	}
 	h.trnIdMap[h.trCnt] = true
+	h.lastTrnId = h.trCnt
 	return nil
 }
 
@@ -189,6 +190,7 @@ func (h *SQLServerHelper) BeginManually() error {
 	h.committed = false         // Reset commit state
 	h.rollbackTriggered = false // Reset rollback state
 	h.trnIdMap = nil
+	h.lastTrnId = 0
 	return nil
 }
 
