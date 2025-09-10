@@ -203,13 +203,14 @@ func (h *SQLServerHelper) Commit() error {
 		return h.Rollback()
 	}
 
-	// If trnId's flag was off, return early
-	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
-		return nil
-	}
-
 	h.rw.Lock()
 	defer h.rw.Unlock()
+
+	// If trnId's flag was off, return early
+	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
+		h.lastTrnId = h.trCnt
+		return nil
+	}
 
 	// If the transaction is not the outermost transaction, reduce transaction count.
 	if h.trCnt > 1 {
@@ -266,6 +267,7 @@ func (h *SQLServerHelper) Rollback() error {
 
 	// If trnId's flag was off, return early
 	if h.trnIdMap != nil && !h.trnIdMap[h.lastTrnId] {
+		h.lastTrnId = h.trCnt
 		return nil
 	}
 
