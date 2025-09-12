@@ -128,11 +128,12 @@ func (h *SQLServerHelper) Close() error {
 	}
 
 	h.rw.Lock()
+	defer h.rw.Unlock()
 	h.trCnt = 0
 	h.conn = nil
 	h.pool = nil
 	h.err = nil
-	h.rw.Unlock()
+	h.trnIdMap = nil
 	return nil
 }
 
@@ -176,13 +177,13 @@ func (h *SQLServerHelper) BeginManually() error {
 		return h.err
 	}
 	if h.pool == nil || h.conn == nil {
-		h.err = fmt.Errorf("begin: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("begin-manually: %w", dhl.ErrNoConn)
 		return h.err
 	}
 	if h.tx == nil {
 		h.tx, h.err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
-			h.err = fmt.Errorf("begin: %w", h.err)
+			h.err = fmt.Errorf("begin-manually: %w", h.err)
 			return h.err
 		}
 	}

@@ -43,8 +43,6 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 
 // Open a new connection
 func (h *SQLServerHelper) Open(ctx context.Context, di *cfg.DatabaseInfo) error {
-
-	// If Sql handle and connection is valid
 	if h.pool != nil && h.conn != nil {
 		h.rw.Lock()
 		h.reuseCnt++
@@ -124,12 +122,12 @@ func (h *SQLServerHelper) Close() error {
 	}
 
 	h.rw.Lock()
+	defer h.rw.Unlock()
 	h.trCnt = 0
 	h.conn = nil
 	h.pool = nil
 	h.err = nil
 	h.trnIdMap = nil
-	h.rw.Unlock()
 	return nil
 }
 
@@ -174,13 +172,13 @@ func (h *SQLServerHelper) BeginManually() error {
 		return h.err
 	}
 	if h.pool == nil || h.conn == nil {
-		h.err = fmt.Errorf("begin: %w", dhl.ErrNoConn)
+		h.err = fmt.Errorf("begin-manually: %w", dhl.ErrNoConn)
 		return h.err
 	}
 	if h.tx == nil {
 		h.tx, h.err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
-			h.err = fmt.Errorf("begin: %w", h.err)
+			h.err = fmt.Errorf("begin-manually: %w", h.err)
 			return h.err
 		}
 	}
