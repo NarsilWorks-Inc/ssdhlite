@@ -19,7 +19,6 @@ import (
 type SQLServerHelper struct {
 	pool *sql.DB
 	tx   *sql.Tx
-	conn *sql.Conn
 	dbi  *dn.DataInfo
 	ctx  context.Context
 	trCnt,
@@ -46,7 +45,7 @@ func (h *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 
 	// If Sql handle and connection is valid
-	if h.pool != nil && h.conn != nil {
+	if h.pool != nil {
 		h.rw.Lock()
 		h.reuseCnt++
 		h.rw.Unlock()
@@ -83,14 +82,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 		}
 	}
 
-	if h.conn == nil {
-		h.conn, h.err = h.pool.Conn(h.ctx)
-		if h.err != nil {
-			h.err = fmt.Errorf("open: %w", h.err)
-			return h.err
-		}
-	}
-
 	h.rw.Lock()
 	h.reuseCnt = 0
 	h.rw.Unlock()
@@ -100,7 +91,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 // Close the helper
 func (h *SQLServerHelper) Close() error {
 
-	if h.conn == nil {
+	if h.pool == nil {
 		return nil
 	}
 
@@ -119,10 +110,6 @@ func (h *SQLServerHelper) Close() error {
 		h.Rollback()
 	}
 
-	if h.err = h.conn.Close(); h.err != nil {
-		return h.err
-	}
-
 	if h.err = h.pool.Close(); h.err != nil {
 		return h.err
 	}
@@ -130,24 +117,23 @@ func (h *SQLServerHelper) Close() error {
 	h.rw.Lock()
 	defer h.rw.Unlock()
 	h.trCnt = 0
-	h.conn = nil
 	h.pool = nil
 	h.err = nil
 	h.trnIdMap = nil
 	return nil
 }
 
-// Begin a transaction. If there is an existing transaction, begin is ignored
+// Begin starts a transaction. If there is an existing transaction, begin is ignored
 func (h *SQLServerHelper) Begin() error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.pool == nil || h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("begin: %w", dhl.ErrNoConn)
 		return h.err
 	}
 	if h.tx == nil {
-		h.tx, h.err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
+		h.tx, h.err = h.pool.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
 			h.err = fmt.Errorf("begin: %w", h.err)
 			return h.err
@@ -171,22 +157,23 @@ func (h *SQLServerHelper) Begin() error {
 	return nil
 }
 
-// BeginManually begins a transaction that does not support deferred rollback.
+// BeginManually starts a transaction that does not support deferred rollback.
 func (h *SQLServerHelper) BeginManually() error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.pool == nil || h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("begin-manually: %w", dhl.ErrNoConn)
 		return h.err
 	}
 	if h.tx == nil {
-		h.tx, h.err = h.conn.BeginTx(h.ctx, &sql.TxOptions{})
+		h.tx, h.err = h.pool.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
 			h.err = fmt.Errorf("begin-manually: %w", h.err)
 			return h.err
 		}
 	}
+
 	// Increment transaction count
 	h.rw.Lock()
 	defer h.rw.Unlock()
@@ -224,7 +211,12 @@ func (h *SQLServerHelper) Commit() error {
 	}
 
 	// Ensure DB, connection, and transaction are valid before committing
-	if h.conn == nil {
+	// if h.conn == nil {
+	// 	h.err = fmt.Errorf("commit: %w", dhl.ErrNoConn)
+	// 	return h.err
+	// }
+
+	if h.pool == nil {
 		h.err = fmt.Errorf("commit: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -280,9 +272,7 @@ func (h *SQLServerHelper) rollbk() error {
 	if h.committed {
 		return nil // 🔧 If already committed, skip rollback
 	}
-
-	// Ensure DB, connection, and transaction are valid before rolling back
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("rollback: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -318,7 +308,7 @@ func (h *SQLServerHelper) Mark(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("mark: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -341,7 +331,7 @@ func (h *SQLServerHelper) Discard(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("discard: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -364,7 +354,7 @@ func (h *SQLServerHelper) Save(name string) error {
 	if h.err != nil {
 		return h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("save: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -387,7 +377,7 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 	if h.err != nil {
 		return nil, h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("query: %w", dhl.ErrNoConn)
 		return nil, h.err
 	}
@@ -419,7 +409,7 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
 	} else {
-		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.pool.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("query: %w", h.err)
@@ -464,7 +454,7 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 		h.err = fmt.Errorf("queryarray: %w", dhl.ErrArrayTypeNotSupported)
 		return h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("queryarray: %w", dhl.ErrNoConn)
 		return h.err
 	}
@@ -475,7 +465,7 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 	if h.tx != nil {
 		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
 	} else {
-		sqr, h.err = h.conn.QueryContext(h.ctx, querySql, args...)
+		sqr, h.err = h.pool.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("queryarray: %w", h.err)
@@ -784,7 +774,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	if h.err != nil {
 		return nil
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("queryrow: %w", dhl.ErrNoConn)
 		return nil
 	}
@@ -812,7 +802,7 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	if h.tx != nil {
 		return NewSQLServerRow(h.tx.QueryRowContext(h.ctx, querySql, args...))
 	}
-	return NewSQLServerRow(h.conn.QueryRowContext(h.ctx, querySql, args...))
+	return NewSQLServerRow(h.pool.QueryRowContext(h.ctx, querySql, args...))
 }
 
 // Exec executes data manipulation command and returns the number of affected rows
@@ -825,7 +815,7 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 	if h.err != nil {
 		return 0, h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		h.err = fmt.Errorf("exec: %w", dhl.ErrNoConn)
 		return 0, h.err
 	}
@@ -856,7 +846,7 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 	if h.tx != nil {
 		sq, h.err = h.tx.ExecContext(h.ctx, querySql, args...)
 	} else {
-		sq, h.err = h.conn.ExecContext(h.ctx, querySql, args...)
+		sq, h.err = h.pool.ExecContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		return 0, fmt.Errorf("exec: %w", h.err)
@@ -868,13 +858,10 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 // Exists checks if a record exist
 func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error) {
 
-	var (
-		cnt int
-	)
 	if h.err != nil {
 		return false, h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		return false, nil
 	}
 
@@ -907,6 +894,8 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	}
 	args = refineParameters(args...)
 	sqlq = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
+
+	var cnt int
 	if h.tx != nil {
 		h.err = h.tx.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 		if h.err != nil {
@@ -918,7 +907,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		}
 		return cnt == 1, nil
 	}
-	h.err = h.conn.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
+	h.err = h.pool.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("exists: %w", h.err)
@@ -932,9 +921,10 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 // Next gets the next serial number
 func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	var (
-		sqlq, schema string
-		affr         int64
-		sqr          sql.Result
+		sqlq,
+		schema string
+		affr int64
+		sqr  sql.Result
 	)
 	if h.err != nil {
 		return h.err
@@ -971,7 +961,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 			if h.tx != nil {
 				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
 			} else {
-				sqr, h.err = h.conn.ExecContext(h.ctx, sqlq)
+				sqr, h.err = h.pool.ExecContext(h.ctx, sqlq)
 			}
 			if h.err != nil {
 				h.err = fmt.Errorf("next: %w", h.err)
@@ -989,7 +979,7 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		if h.tx != nil {
 			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		} else {
-			h.err = h.conn.QueryRowContext(h.ctx, sqlq).Scan(next)
+			h.err = h.pool.QueryRowContext(h.ctx, sqlq).Scan(next)
 		}
 		if h.err != nil {
 			h.err = fmt.Errorf("next: %w", h.err)
@@ -1034,12 +1024,12 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		}
 		return nil
 	}
-	_, h.err = h.conn.ExecContext(h.ctx, seq)
+	_, h.err = h.pool.ExecContext(h.ctx, seq)
 	if h.err != nil {
 		h.err = fmt.Errorf("next: %w", h.err)
 		return h.err
 	}
-	h.err = h.conn.QueryRowContext(h.ctx, sqlq).Scan(next)
+	h.err = h.pool.QueryRowContext(h.ctx, sqlq).Scan(next)
 	if h.err != nil {
 		h.err = fmt.Errorf("next: %w", h.err)
 		return h.err
@@ -1052,7 +1042,7 @@ func (h *SQLServerHelper) VerifyWithin(tableName string, values []dhl.VerifyExpr
 	if h.err != nil {
 		return false, h.err
 	}
-	if h.conn == nil {
+	if h.pool == nil {
 		return false, fmt.Errorf("verify: %w", dhl.ErrNoConn)
 	}
 

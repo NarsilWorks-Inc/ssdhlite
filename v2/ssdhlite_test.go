@@ -98,6 +98,7 @@ func TestGetRows(t *testing.T) {
 	cdi := cf.GetDatabaseInfo(`DEFAULT`)
 	di := dn.New(
 		dn.ConnectionString(cdi.ConnectionString),
+		dn.ParameterPlaceHolder(cdi.ParameterPlaceholder),
 	)
 	if err = c.Open(context.Background(), di); err != nil {
 		t.Log(err.Error())
@@ -379,6 +380,117 @@ func TestWriteTransactions(t *testing.T) {
 
 }
 
+func TestWriteReadTemporaryTables(t *testing.T) {
+
+	var (
+		err error
+		c   dhl.DataHelperLite
+	)
+
+	//c = &SQLServerHelper{}
+
+	c, err = dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	cdi := cf.GetDatabaseInfo(`DEFAULT`)
+	di := dn.New(
+		dn.ConnectionString(cdi.ConnectionString),
+	)
+	if err = c.Open(context.Background(), di); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer c.Close()
+
+	i := 0
+
+	c.Begin()
+
+	_, err = c.Exec(`
+			CREATE TABLE #tmp (
+				ID int IDENTITY (1,1),
+				Name varchar(20)
+			)`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	for {
+
+		if i > 999 {
+			break
+		}
+
+		_, err = c.Exec(`INSERT INTO #tmp (Name) VALUES (@p1);`, fmt.Sprintf("Message %d", i), i)
+		if err != nil {
+			c.Rollback()
+			t.Log(err.Error())
+			break
+		}
+
+		/*
+			if (i % 5) == 0 {
+				c.Mark(`MO`)
+			}
+
+			if (i % 10) == 0 {
+				//c.Save(`MO`)
+				c.Discard(`MO`)
+			}
+		*/
+
+		//t.Logf("%d affected rows", affr)
+
+		i++
+	}
+
+	rows, err := c.Query(`SELECT ID, Name FROM #tmp;`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer rows.Close()
+
+	var (
+		id   int
+		name string
+	)
+
+	for rows.Next() {
+		err = rows.Scan(&id, &name)
+		if err != nil {
+			t.Log(err.Error())
+			t.Fail()
+			return
+		}
+
+		t.Logf("ID: %d, Name: %s", id, name)
+	}
+
+	if rows.Err() != nil {
+		t.Log(err.Error())
+		return
+	}
+
+	// c.Rollback()
+	c.Commit()
+
+}
+
 func TestSequence(t *testing.T) {
 	var (
 		err error
@@ -549,7 +661,7 @@ func TestExists(t *testing.T) {
 	}
 	defer c.Close()
 
-	exists, err = c.Exists(`tnfEmailSent WHERE EmailKey = @p1;`, 7)
+	exists, err = c.Exists(`tnfEmailSent WHERE EmailKey = @p1`, 7)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -843,6 +955,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 	cdi := cf.GetDatabaseInfo(`DEFAULT`)
 	di := dn.New(
 		dn.ConnectionString(cdi.ConnectionString),
+		dn.ParameterPlaceHolder(cdi.ParameterPlaceholder),
 	)
 	if err = c.Open(context.Background(), di); err != nil {
 		t.Log(err.Error())
