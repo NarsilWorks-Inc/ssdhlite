@@ -72,9 +72,13 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 	if di.MaxOpenConnection != nil {
 		h.db.SetMaxOpenConns(*di.MaxOpenConnection)
 	}
+
+	h.db.SetMaxIdleConns(-1)
+	h.db.SetMaxIdleConns(2)
 	if di.MaxIdleConnection != nil {
 		h.db.SetMaxIdleConns(*di.MaxIdleConnection)
 	}
+
 	if di.MaxConnectionLifetime != nil {
 		h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
 	}
