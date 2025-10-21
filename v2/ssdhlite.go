@@ -20,15 +20,13 @@ type SQLServerHelper struct {
 	db  *sql.DB
 	tx  *sql.Tx
 	dbi *dn.DataInfo
-	ctx,
-	rCtx context.Context
+	ctx context.Context
 	trCnt,
 	reuseCnt uint8
 	rw  sync.RWMutex
 	err error
 	rollbackTriggered,
-	committed,
-	poolAtInit bool
+	committed bool
 	trnIdMap  map[int8]bool
 	lastTrnId int8
 }
@@ -73,8 +71,7 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 		h.db.SetMaxOpenConns(*di.MaxOpenConnection)
 	}
 
-	h.db.SetMaxIdleConns(-1)
-	h.db.SetMaxIdleConns(2)
+	h.db.SetMaxIdleConns(0)
 	if di.MaxIdleConnection != nil {
 		h.db.SetMaxIdleConns(*di.MaxIdleConnection)
 	}
@@ -93,18 +90,6 @@ func (h *SQLServerHelper) Open(ctx context.Context, di *dn.DataInfo) error {
 	h.rw.Lock()
 	h.reuseCnt = 0
 	h.rw.Unlock()
-	return nil
-}
-
-// Acquire sets all queries to a new context from pool.
-//
-// It will return an error if the current connection is not pooled.
-func (h *SQLServerHelper) Acquire(ctx context.Context) error {
-	if !h.poolAtInit {
-		h.err = fmt.Errorf("acquire: opened connection is not from pool")
-		return h.err
-	}
-	h.rCtx = ctx
 	return nil
 }
 
@@ -127,11 +112,6 @@ func (h *SQLServerHelper) Close() error {
 	// rollback if it exists
 	if h.tx != nil {
 		h.Rollback()
-	}
-
-	// If pool was set externally, do not close
-	if h.poolAtInit {
-		return nil
 	}
 
 	if h.err = h.db.Close(); h.err != nil {
@@ -157,13 +137,7 @@ func (h *SQLServerHelper) Begin() error {
 		return h.err
 	}
 	if h.tx == nil {
-		// Set the context to the connection context
-		// Use the acquired context if availables
-		ctx := h.ctx
-		if h.rCtx != nil {
-			ctx = h.rCtx
-		}
-		h.tx, h.err = h.db.BeginTx(ctx, &sql.TxOptions{})
+		h.tx, h.err = h.db.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
 			h.err = fmt.Errorf("begin: %w", h.err)
 			return h.err
@@ -197,11 +171,7 @@ func (h *SQLServerHelper) BeginManually() error {
 		return h.err
 	}
 	if h.tx == nil {
-		ctx := h.ctx
-		if h.rCtx != nil {
-			ctx = h.rCtx
-		}
-		h.tx, h.err = h.db.BeginTx(ctx, &sql.TxOptions{})
+		h.tx, h.err = h.db.BeginTx(h.ctx, &sql.TxOptions{})
 		if h.err != nil {
 			h.err = fmt.Errorf("begin-manually: %w", h.err)
 			return h.err
@@ -351,11 +321,7 @@ func (h *SQLServerHelper) Mark(name string) error {
 		return h.err
 	}
 	if h.trCnt > 0 {
-		ctx := h.ctx
-		if h.rCtx != nil {
-			ctx = h.rCtx
-		}
-		_, h.err = h.tx.ExecContext(ctx, `SAVE TRAN sp_`+name+`;`)
+		_, h.err = h.tx.ExecContext(h.ctx, `SAVE TRAN sp_`+name+`;`)
 		if h.err != nil {
 			h.err = fmt.Errorf("mark: %w", h.err)
 			return h.err
@@ -378,11 +344,7 @@ func (h *SQLServerHelper) Discard(name string) error {
 		return h.err
 	}
 	if h.trCnt > 0 {
-		ctx := h.ctx
-		if h.rCtx != nil {
-			ctx = h.rCtx
-		}
-		_, h.err = h.tx.ExecContext(ctx, `ROLLBACK TRAN sp_`+name+`;`)
+		_, h.err = h.tx.ExecContext(h.ctx, `ROLLBACK TRAN sp_`+name+`;`)
 		if h.err != nil {
 			h.err = fmt.Errorf("discard: %w", h.err)
 			return h.err
@@ -405,11 +367,7 @@ func (h *SQLServerHelper) Save(name string) error {
 		return h.err
 	}
 	if h.trCnt > 0 {
-		ctx := h.ctx
-		if h.rCtx != nil {
-			ctx = h.rCtx
-		}
-		_, h.err = h.tx.ExecContext(ctx, `COMMIT TRAN sp_`+name+`;`)
+		_, h.err = h.tx.ExecContext(h.ctx, `COMMIT TRAN sp_`+name+`;`)
 		if h.err != nil {
 			h.err = fmt.Errorf("save: %w", h.err)
 			return h.err
@@ -453,15 +411,10 @@ func (h *SQLServerHelper) Query(querySql string, args ...any) (dhl.Rows, error) 
 	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
 
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
-
 	if h.tx != nil {
-		sqr, h.err = h.tx.QueryContext(ctx, querySql, args...)
+		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
 	} else {
-		sqr, h.err = h.db.QueryContext(ctx, querySql, args...)
+		sqr, h.err = h.db.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("query: %w", h.err)
@@ -514,14 +467,10 @@ func (h *SQLServerHelper) QueryArray(querySql string, out any, args ...any) erro
 	// replace tables meant for interpolation {table} for putting the schema
 	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
 	if h.tx != nil {
-		sqr, h.err = h.tx.QueryContext(ctx, querySql, args...)
+		sqr, h.err = h.tx.QueryContext(h.ctx, querySql, args...)
 	} else {
-		sqr, h.err = h.db.QueryContext(ctx, querySql, args...)
+		sqr, h.err = h.db.QueryContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		h.err = fmt.Errorf("queryarray: %w", h.err)
@@ -855,14 +804,10 @@ func (h *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
 	if h.tx != nil {
-		return NewSQLServerRow(h.tx.QueryRowContext(ctx, querySql, args...))
+		return NewSQLServerRow(h.tx.QueryRowContext(h.ctx, querySql, args...))
 	}
-	return NewSQLServerRow(h.db.QueryRowContext(ctx, querySql, args...))
+	return NewSQLServerRow(h.db.QueryRowContext(h.ctx, querySql, args...))
 }
 
 // Exec executes data manipulation command and returns the number of affected rows
@@ -899,14 +844,10 @@ func (h *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 	querySql = dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder)
 	querySql = dhl.InterpolateTable(querySql, schema)
 	args = refineParameters(args...)
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
 	if h.tx != nil {
-		sq, h.err = h.tx.ExecContext(ctx, querySql, args...)
+		sq, h.err = h.tx.ExecContext(h.ctx, querySql, args...)
 	} else {
-		sq, h.err = h.db.ExecContext(ctx, querySql, args...)
+		sq, h.err = h.db.ExecContext(h.ctx, querySql, args...)
 	}
 	if h.err != nil {
 		return 0, fmt.Errorf("exec: %w", h.err)
@@ -955,12 +896,8 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 	sqlq = `SELECT TOP 1 1 FROM ` + sqlWithParams + `;`
 
 	var cnt int
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
 	if h.tx != nil {
-		h.err = h.tx.QueryRowContext(ctx, sqlq, args...).Scan(&cnt)
+		h.err = h.tx.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 		if h.err != nil {
 			if !errors.Is(h.err, dhl.ErrNoRows) {
 				h.err = fmt.Errorf("exists: %w", h.err)
@@ -970,7 +907,7 @@ func (h *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, error
 		}
 		return cnt == 1, nil
 	}
-	h.err = h.db.QueryRowContext(ctx, sqlq, args...).Scan(&cnt)
+	h.err = h.db.QueryRowContext(h.ctx, sqlq, args...).Scan(&cnt)
 	if h.err != nil {
 		if !errors.Is(h.err, dhl.ErrNoRows) {
 			h.err = fmt.Errorf("exists: %w", h.err)
@@ -1001,10 +938,6 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 	if h.dbi.Schema != nil && *h.dbi.Schema != "" {
 		schema = *h.dbi.Schema
 	}
-	ctx := h.ctx
-	if h.rCtx != nil {
-		ctx = h.rCtx
-	}
 	// if the database config has set a sequence generator, this will use it
 	sg := h.dbi.SequenceGenerator
 	if sg != nil {
@@ -1025,9 +958,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		if sg.UpsertQuery != "" {
 			sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.UpsertQuery, sg.NamePlaceHolder, serial), schema)
 			if h.tx != nil {
-				sqr, h.err = h.tx.ExecContext(ctx, sqlq)
+				sqr, h.err = h.tx.ExecContext(h.ctx, sqlq)
 			} else {
-				sqr, h.err = h.db.ExecContext(ctx, sqlq)
+				sqr, h.err = h.db.ExecContext(h.ctx, sqlq)
 			}
 			if h.err != nil {
 				h.err = fmt.Errorf("next: %w", h.err)
@@ -1043,9 +976,9 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 		// result query needs a single scalar value to be returned
 		sqlq = dhl.InterpolateTable(strings.ReplaceAll(sg.ResultQuery, sg.NamePlaceHolder, serial), schema)
 		if h.tx != nil {
-			h.err = h.tx.QueryRowContext(ctx, sqlq).Scan(next)
+			h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		} else {
-			h.err = h.db.QueryRowContext(ctx, sqlq).Scan(next)
+			h.err = h.db.QueryRowContext(h.ctx, sqlq).Scan(next)
 		}
 		if h.err != nil {
 			h.err = fmt.Errorf("next: %w", h.err)
@@ -1078,24 +1011,24 @@ func (h *SQLServerHelper) Next(serial string, next *int64) error {
 
 	sqlq = fmt.Sprintf("SELECT NEXT VALUE FOR %s.%s;", schema, sln)
 	if h.tx != nil {
-		_, h.err = h.tx.ExecContext(ctx, seq)
+		_, h.err = h.tx.ExecContext(h.ctx, seq)
 		if h.err != nil {
 			h.err = fmt.Errorf("next: %w", h.err)
 			return h.err
 		}
-		h.err = h.tx.QueryRowContext(ctx, sqlq).Scan(next)
+		h.err = h.tx.QueryRowContext(h.ctx, sqlq).Scan(next)
 		if h.err != nil {
 			h.err = fmt.Errorf("next: %w", h.err)
 			return h.err
 		}
 		return nil
 	}
-	_, h.err = h.db.ExecContext(ctx, seq)
+	_, h.err = h.db.ExecContext(h.ctx, seq)
 	if h.err != nil {
 		h.err = fmt.Errorf("next: %w", h.err)
 		return h.err
 	}
-	h.err = h.db.QueryRowContext(ctx, sqlq).Scan(next)
+	h.err = h.db.QueryRowContext(h.ctx, sqlq).Scan(next)
 	if h.err != nil {
 		h.err = fmt.Errorf("next: %w", h.err)
 		return h.err
@@ -1252,19 +1185,4 @@ func refineParameters(args ...any) []any {
 // Ping sends data packets to check pool connection
 func (h *SQLServerHelper) Ping() error {
 	return h.db.PingContext(h.ctx)
-}
-
-// Pooled indicates that the helper was set externally or pooled
-func (h *SQLServerHelper) Pooled() bool {
-	return h.poolAtInit
-}
-
-// PoolSet sets the state that the helper was set externally or being pooled
-func (h *SQLServerHelper) PoolSet() {
-	h.poolAtInit = true
-}
-
-// PoolUnset set the pool to unset
-func (h *SQLServerHelper) PoolUnset() {
-	h.poolAtInit = false
 }
