@@ -19,12 +19,14 @@ type SQLServerHelper struct {
 	tx         *sql.Tx
 	ctx        context.Context
 	trCnt      uint16
-	deferDepth uint16
 	rw         sync.RWMutex
 	finalizeMu sync.Mutex
 	err        error
 	rollbackTriggered,
 	committed bool
+	// LIFO stack of per-scope state. true = ARMED, false = DISARMED
+	frames    []bool
+	manualCnt uint16 // manual-mode nesting
 }
 
 func init() {
@@ -60,6 +62,10 @@ func (dh *SQLServerHelper) Begin() error {
 		dh.err = fmt.Errorf("begin: %w", dhl.ErrHandleNotSet)
 		return dh.err
 	}
+	if dh.manualCnt > 0 {
+		dh.err = errors.New("begin: cannot mix Begin() with BeginManually() in the same transaction")
+		return dh.err
+	}
 	if dh.tx == nil {
 		var err error
 		dh.tx, err = dh.hndl.DB().BeginTx(dh.ctx, nil)
@@ -72,9 +78,9 @@ func (dh *SQLServerHelper) Begin() error {
 	dh.trCnt++
 	dh.committed = false         // ✅ Reset commit state
 	dh.rollbackTriggered = false // ✅ Reset rollback state
-	if dh.trCnt > 1 {
-		dh.deferDepth++
-	}
+
+	// Track this scope’s deferred rollback
+	dh.frames = append(dh.frames, true) // armed
 
 	return nil
 }
@@ -90,6 +96,10 @@ func (dh *SQLServerHelper) BeginManually() error {
 		dh.err = fmt.Errorf("begin-manually: %w", dhl.ErrHandleNotSet)
 		return dh.err
 	}
+	if dh.trCnt > 0 || len(dh.frames) > 0 {
+		dh.err = errors.New("begin-manually: cannot mix BeginManually() with Begin() in the same transaction")
+		return dh.err
+	}
 	if dh.tx == nil {
 		var err error
 		dh.tx, err = dh.hndl.DB().BeginTx(dh.ctx, nil)
@@ -101,7 +111,7 @@ func (dh *SQLServerHelper) BeginManually() error {
 
 	// Increment transaction count
 	dh.trCnt++
-	dh.deferDepth = 0
+	dh.manualCnt++
 	dh.committed = false         // Reset commit state
 	dh.rollbackTriggered = false // Reset rollback state
 	return nil
@@ -109,7 +119,7 @@ func (dh *SQLServerHelper) BeginManually() error {
 
 func (dh *SQLServerHelper) Commit() error {
 	dh.rw.RLock()
-	tx, trCnt, committed, rb, herr, hndl := dh.tx, dh.trCnt, dh.committed, dh.rollbackTriggered, dh.err, dh.hndl
+	tx, trCnt, committed, rb, herr, hndl, manualCnt := dh.tx, dh.trCnt, dh.committed, dh.rollbackTriggered, dh.err, dh.hndl, dh.manualCnt
 	dh.rw.RUnlock()
 	if tx == nil || trCnt == 0 || rb || committed {
 		return nil
@@ -118,12 +128,53 @@ func (dh *SQLServerHelper) Commit() error {
 		return dh.Rollback()
 	}
 
+	// Manual mode
+	if manualCnt > 0 {
+		if hndl == nil {
+			dh.setDHErr(fmt.Errorf("commit: %w", dhl.ErrHandleNotSet))
+			return dh.err
+		}
+		if manualCnt > 1 {
+			dh.rw.Lock()
+			dh.manualCnt--
+			if dh.trCnt > 0 {
+				dh.trCnt--
+			}
+			dh.rw.Unlock()
+			return nil
+		}
+		// outermost manual: real commit
+		dh.finalizeMu.Lock()
+		err := tx.Commit()
+		dh.finalizeMu.Unlock()
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			dh.setDHErr(fmt.Errorf("commit: %w", err))
+			return dh.err
+		}
+
+		dh.rw.Lock()
+		dh.manualCnt = 0
+		dh.tx = nil
+		// Treat ErrTxDone as success (idempotent commit)
+		if err == nil || errors.Is(err, sql.ErrTxDone) {
+			dh.committed = true
+			dh.err = nil
+		} else {
+			dh.committed = false
+		}
+		dh.rollbackTriggered = false
+		dh.frames = nil
+		dh.trCnt = 0
+		dh.rw.Unlock()
+		return nil
+	}
+
+	// Deferred mode
 	// If the transaction is not the outermost transaction, reduce transaction count.
 	if trCnt > 1 {
 		dh.rw.Lock()
-		// If this transaction was called with Begin(), this is a deferred rollback
-		if dh.deferDepth > 0 {
-			dh.deferDepth--
+		if n := len(dh.frames); n > 0 {
+			dh.frames[n-1] = false // DISARMED
 		}
 		dh.trCnt--
 		dh.rw.Unlock()
@@ -136,12 +187,11 @@ func (dh *SQLServerHelper) Commit() error {
 		return dh.err
 	}
 
-	// serialize finalization
-	dh.finalizeMu.Lock()
-	defer dh.finalizeMu.Unlock()
-
+	// Serialize finalization
 	// Commit the outermost transaction
+	dh.finalizeMu.Lock()
 	err := tx.Commit()
+	dh.finalizeMu.Unlock()
 	if err != nil && !errors.Is(err, sql.ErrTxDone) {
 		dh.setDHErr(fmt.Errorf("commit: %w", err))
 		return dh.err
@@ -150,32 +200,61 @@ func (dh *SQLServerHelper) Commit() error {
 	// Mark committed, set transaction to nil and set rollback flag to false
 	dh.rw.Lock()
 	dh.trCnt = 0
-	// Only mark committed on a successful commit
-	if err == nil {
+	if err == nil || errors.Is(err, sql.ErrTxDone) {
 		dh.committed = true
+		dh.err = nil
 	}
 	dh.tx = nil
 	dh.rollbackTriggered = false
-	dh.deferDepth = 0
+	dh.frames = nil
 	dh.rw.Unlock()
 	return nil
 }
 
 func (dh *SQLServerHelper) Rollback() error {
 	dh.rw.RLock()
-	tx, trCnt, committed, herr := dh.tx, dh.trCnt, dh.committed, dh.err
+	tx, trCnt, manualCnt, committed, herr := dh.tx, dh.trCnt, dh.manualCnt, dh.committed, dh.err
 	dh.rw.RUnlock()
-	if tx == nil || trCnt == 0 || committed {
+
+	if tx == nil || committed {
 		return nil
 	}
+
+	// Manual mode
+	if manualCnt > 0 {
+		if manualCnt > 1 {
+			dh.rw.Lock()
+			dh.manualCnt--
+			if dh.trCnt > 0 {
+				dh.trCnt--
+			}
+			dh.rw.Unlock()
+			return nil
+		}
+		// outermost manual
+		return dh.rollbk()
+	}
+
+	// Deferred mode
+	// If this scope was committed earlier, its defer no-ops
+	dh.rw.Lock()
+	if n := len(dh.frames); n > 0 && !dh.frames[n-1] {
+		dh.frames = dh.frames[:n-1]
+		dh.rw.Unlock()
+		return nil
+	}
+	dh.rw.Unlock()
+
 	if herr != nil {
 		return dh.rollbk()
 	}
 
-	// Deferred rollback path: unwind both the deferred depth and the nesting count.
-	if dh.deferDepth > 0 {
+	if trCnt > 1 {
 		dh.rw.Lock()
-		dh.deferDepth--
+		dh.rollbackTriggered = true
+		if n := len(dh.frames); n > 0 {
+			dh.frames = dh.frames[:n-1] // pop armed
+		}
 		if dh.trCnt > 0 {
 			dh.trCnt--
 		}
@@ -201,10 +280,9 @@ func (dh *SQLServerHelper) rollbk() error {
 
 	// serialize finalization
 	dh.finalizeMu.Lock()
-	defer dh.finalizeMu.Unlock()
-
-	// Perform rollback
-	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+	err := tx.Rollback()
+	dh.finalizeMu.Unlock()
+	if err != nil && !errors.Is(err, sql.ErrTxDone) {
 		dh.setDHErr(fmt.Errorf("rollbk: %w", err))
 		return dh.err
 	}
@@ -217,7 +295,7 @@ func (dh *SQLServerHelper) rollbk() error {
 	dh.err = nil
 	dh.committed = false         // 🔧 Reset flags
 	dh.rollbackTriggered = false // 🔧 Reset flags (rollback is done)
-	dh.deferDepth = 0
+	dh.frames = nil              // NEW: clear frames
 	return nil
 }
 
@@ -240,7 +318,7 @@ func (dh *SQLServerHelper) Mark(name string) error {
 	}
 
 	if trCnt > 0 {
-		_, err := tx.ExecContext(dh.ctx, `SAVE TRAN sp_`+name+`;`)
+		_, err := tx.ExecContext(dh.ctx, `SAVE TRAN sp_`+sanitizeName(name)+`;`)
 		if err != nil {
 			dh.setDHErr(fmt.Errorf("mark: %w", err))
 			return dh.err
@@ -268,7 +346,7 @@ func (dh *SQLServerHelper) Discard(name string) error {
 	}
 
 	if trCnt > 0 {
-		_, err := tx.ExecContext(dh.ctx, `ROLLBACK TRAN sp_`+name+`;`)
+		_, err := tx.ExecContext(dh.ctx, `ROLLBACK TRAN sp_`+sanitizeName(name)+`;`)
 		if err != nil {
 			dh.setDHErr(fmt.Errorf("discard: %w", err))
 			return dh.err
@@ -280,7 +358,7 @@ func (dh *SQLServerHelper) Discard(name string) error {
 // Save a savepoint
 func (dh *SQLServerHelper) Save(name string) error {
 	dh.rw.RLock()
-	tx, herr, trCnt, hndl := dh.tx, dh.err, dh.trCnt, dh.hndl
+	tx, herr, hndl := dh.tx, dh.err, dh.hndl
 	dh.rw.RUnlock()
 	if herr != nil {
 		return herr
@@ -538,13 +616,14 @@ func (dh *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 	dh.rw.RLock()
 	tx, herr, hndl := dh.tx, dh.err, dh.hndl
 	dh.rw.RUnlock()
+
 	if herr != nil {
-		return nil
+		return NewSQLServerRow(nil)
 	}
 
 	if hndl == nil {
 		dh.setDHErr(fmt.Errorf("queryrow: %w", dhl.ErrHandleNotSet))
-		return nil
+		return NewSQLServerRow(nil)
 	}
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
@@ -590,7 +669,8 @@ func (dh *SQLServerHelper) Exec(querySql string, args ...any) (int64, error) {
 		sqr, err = hndl.DB().ExecContext(dh.ctx, querySql, args...)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("exec: %w", err)
+		dh.setDHErr(fmt.Errorf("exec: %w", err))
+		return 0, dh.err
 	}
 	ra, _ := sqr.RowsAffected()
 	return ra, nil
@@ -639,9 +719,6 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, erro
 				dh.setDHErr(fmt.Errorf("exists: %w", err))
 				return false, dh.err
 			}
-			dh.rw.Lock()
-			dh.err = nil
-			dh.rw.Unlock()
 		}
 		return cnt == 1, nil
 	}
@@ -651,9 +728,6 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, erro
 			dh.setDHErr(fmt.Errorf("exists: %w", err))
 			return false, dh.err
 		}
-		dh.rw.Lock()
-		dh.err = nil
-		dh.rw.Unlock()
 	}
 	return cnt == 1, nil
 }
@@ -677,13 +751,19 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) error {
 		return dh.err
 	}
 
+	di := hndl.DI()
+	if di == nil {
+		dh.setDHErr(errors.New("next: database info not configured"))
+		return dh.err
+	}
+
 	schema := "dbo"
-	if dh.hndl.DI().Schema != nil && *dh.hndl.DI().Schema != "" {
-		schema = *dh.hndl.DI().Schema
+	if di.Schema != nil && *di.Schema != "" {
+		schema = *di.Schema
 	}
 
 	// if the database config has set a sequence generator, this will use it
-	sg := dh.hndl.DI().SequenceGenerator
+	sg := di.SequenceGenerator
 	if sg != nil {
 		if sg.NamePlaceHolder == "" {
 			dh.setDHErr(
@@ -874,4 +954,21 @@ func (dh *SQLServerHelper) setDHErr(err error) {
 	dh.rw.Lock()
 	dh.err = err
 	dh.rw.Unlock()
+}
+
+func sanitizeName(s string) string {
+	// replace non [A-Za-z0-9_] with _
+	b := make([]byte, len(s))
+	for i := range s {
+		c := s[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' {
+			b[i] = c
+		} else {
+			b[i] = '_'
+		}
+	}
+	if len(b) == 0 {
+		return "sp"
+	}
+	return string(b)
 }
