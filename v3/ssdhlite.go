@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -730,6 +731,76 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, erro
 		}
 	}
 	return cnt == 1, nil
+}
+
+// ExistsExt a set of validation expression against the underlying database table
+func (dh *SQLServerHelper) ExistsExt(tableName string, values []dhl.ColumnFilter) (Valid bool, Error error) {
+	dh.rw.RLock()
+	herr, hndl := dh.err, dh.hndl
+	dh.rw.RUnlock()
+	if herr != nil {
+		return false, herr
+	}
+	if hndl == nil {
+		dh.setDHErr(fmt.Errorf("existsext: %w", dhl.ErrHandleNotSet))
+		return false, dh.err
+	}
+
+	var (
+		andstr, sqlq,
+		ph string
+		exists bool
+		i      int
+	)
+
+	args := make([]any, 0)
+
+	placeholder, paraminseq, schema := dh.getParamDataInfo()
+
+	tableNameWithParameters := tableName
+	if len(values) > 0 {
+		tableNameWithParameters += ` WHERE `
+	}
+	ph = placeholder
+	for _, v := range values {
+		if isInterfaceNil(v.Value) {
+			v.Operator = " IS NULL"
+			ph = ""
+		} else {
+			// If there is no operator, we default to "="
+			if v.Operator == "" {
+				v.Operator = "="
+			}
+			if paraminseq {
+				ph = placeholder + strconv.Itoa(i+1)
+			}
+			args = append(args, v.Value)
+			i++
+		}
+
+		tableNameWithParameters += andstr + v.Name + v.Operator + ph
+		andstr = " AND "
+	}
+
+	args = refineParameters(args...)
+	tableNameWithParameters = strings.TrimSpace(tableNameWithParameters)
+	if strings.HasSuffix(tableNameWithParameters, `;`) {
+		tableNameWithParameters, _ = strings.CutSuffix(tableNameWithParameters, `;`)
+	}
+
+	sqlq = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, schema)
+	err := dh.QueryRow(sqlq, args...).Scan(&exists)
+	if err != nil {
+		if !errors.Is(err, dhl.ErrNoRows) {
+			dh.rw.Lock()
+			dh.err = fmt.Errorf("existsext: %w", err)
+			dh.rw.Unlock()
+			return false, dh.err
+		}
+		return false, nil
+	}
+
+	return exists, nil
 }
 
 // Next gets the next serial number
