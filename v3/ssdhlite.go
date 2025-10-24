@@ -16,7 +16,7 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	hndl       dhl.DataHelperHandler
+	hndl       dhl.DataHelperHandle
 	tx         *sql.Tx
 	ctx        context.Context
 	trCnt      uint16
@@ -36,12 +36,12 @@ func init() {
 }
 
 // NewHelper instantiates new helper
-func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLiter {
+func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 	return &SQLServerHelper{}
 }
 
 // Acquire sets all queries to a new context from pool.
-func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandler) error {
+func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandle) error {
 	dh.rw.Lock()
 	defer dh.rw.Unlock()
 	if ctx == nil {
