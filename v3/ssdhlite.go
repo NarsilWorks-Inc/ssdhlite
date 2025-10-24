@@ -16,7 +16,7 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	hndl       *dhl.DataHelperHandle
+	hndl       dhl.DataHelperHandler
 	tx         *sql.Tx
 	ctx        context.Context
 	trCnt      uint16
@@ -36,12 +36,12 @@ func init() {
 }
 
 // NewHelper instantiates new helper
-func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLite {
+func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLiter {
 	return &SQLServerHelper{}
 }
 
 // Acquire sets all queries to a new context from pool.
-func (dh *SQLServerHelper) Acquire(ctx context.Context, h *dhl.DataHelperHandle) error {
+func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandler) error {
 	dh.rw.Lock()
 	defer dh.rw.Unlock()
 	if ctx == nil {
@@ -698,9 +698,7 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (bool, erro
 	sqlWithParams = dhl.InterpolateTable(sqlWithParams, schema)
 	sqlWithParams = strings.TrimSpace(sqlWithParams)
 	if strings.HasSuffix(sqlWithParams, `;`) {
-		dh.rw.Lock()
-		dh.err = errors.New(`semicolons are not allowed at the end of this query`)
-		dh.rw.Unlock()
+		dh.setDHErr(errors.New(`semicolons are not allowed at the end of this query`))
 		return false, dh.err
 	}
 	args = refineParameters(args...)

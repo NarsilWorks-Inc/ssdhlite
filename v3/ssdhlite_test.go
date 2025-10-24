@@ -93,7 +93,7 @@ func TestGetRows(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -199,7 +199,7 @@ func TestGetRow(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -326,7 +326,7 @@ func TestWriteTransactions(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -425,7 +425,7 @@ func TestWriteReadTemporaryTables(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -544,7 +544,7 @@ func TestSequence(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -612,7 +612,7 @@ func TestMultipleOpen(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -703,7 +703,7 @@ func TestExists(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -755,7 +755,7 @@ func TestQueryArray(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -811,7 +811,7 @@ func TestGetBytes(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -877,7 +877,7 @@ func TestGetDecimal(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -947,7 +947,7 @@ func TestExecDecimal(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1008,7 +1008,7 @@ func TestExecRowsAffected(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1066,7 +1066,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1100,7 +1100,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
@@ -1110,7 +1110,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
@@ -1121,7 +1121,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
@@ -1156,7 +1156,7 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1192,7 +1192,7 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
@@ -1202,7 +1202,7 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
@@ -1213,7 +1213,7 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentIDX = ?`, 1)
@@ -1248,7 +1248,7 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1284,7 +1284,7 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
@@ -1294,7 +1294,7 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentIDX = ?`, 1)
@@ -1305,7 +1305,7 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
@@ -1340,7 +1340,7 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1376,7 +1376,7 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE IDX = ?`, 1)
@@ -1386,7 +1386,7 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
@@ -1397,7 +1397,7 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		defer dh.Rollback()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
@@ -1432,7 +1432,7 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1468,7 +1468,7 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
 		if err != nil {
@@ -1478,7 +1478,7 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
 		if err != nil {
@@ -1489,7 +1489,7 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentIDX = ?`, 1)
 		if err != nil {
@@ -1524,7 +1524,7 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1560,7 +1560,7 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE ID = ?`, 1)
 		if err != nil {
@@ -1570,7 +1570,7 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentIDX = ?`, 1)
 		if err != nil {
@@ -1581,7 +1581,7 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
 		if err != nil {
@@ -1616,7 +1616,7 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := dhl.DataHelperHandle{}
+	hndl := DataHelperHandle{}
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1652,7 +1652,7 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	}
 
 	// Delete master record
-	three := func(dh dhl.DataHelperLite) {
+	three := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {MasterTable} WHERE IDX = ?`, 1)
 		if err != nil {
@@ -1662,7 +1662,7 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	two := func(dh dhl.DataHelperLite) {
+	two := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable2} WHERE ParentID = ?`, 1)
 		if err != nil {
@@ -1673,7 +1673,7 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 		dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
+	one := func(dh dhl.DataHelperLiter) {
 		dh.Begin()
 		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
 		if err != nil {

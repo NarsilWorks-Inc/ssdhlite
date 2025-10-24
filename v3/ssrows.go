@@ -21,10 +21,11 @@ func NewSQLServerRows(sqlr *sql.Rows) SQLServerRows {
 }
 
 // Close rows
-func (ss SQLServerRows) Close() {
+func (ss SQLServerRows) Close() error {
 	if ss.sqr != nil {
 		ss.sqr.Close()
 	}
+	return nil
 }
 
 // Err check
