@@ -93,7 +93,13 @@ func TestGetRows(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -110,7 +116,7 @@ func TestGetRows(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -199,7 +205,14 @@ func TestGetRow(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -216,7 +229,7 @@ func TestGetRow(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -326,7 +339,14 @@ func TestWriteTransactions(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -343,7 +363,7 @@ func TestWriteTransactions(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -425,7 +445,14 @@ func TestWriteReadTemporaryTables(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -442,7 +469,7 @@ func TestWriteReadTemporaryTables(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -544,7 +571,14 @@ func TestSequence(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -561,7 +595,7 @@ func TestSequence(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -612,7 +646,14 @@ func TestMultipleOpen(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -631,7 +672,7 @@ func TestMultipleOpen(t *testing.T) {
 		}
 
 		// Acquire handle and context
-		err = c.Acquire(context.Background(), &hndl)
+		err = c.Acquire(context.Background(), hndl)
 		if err != nil {
 			t.Log(err.Error())
 			t.Fail()
@@ -703,7 +744,14 @@ func TestExists(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -720,7 +768,7 @@ func TestExists(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -755,7 +803,13 @@ func TestQueryArray(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -772,7 +826,7 @@ func TestQueryArray(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -811,7 +865,14 @@ func TestGetBytes(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -828,7 +889,7 @@ func TestGetBytes(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -877,7 +938,14 @@ func TestGetDecimal(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -894,7 +962,7 @@ func TestGetDecimal(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -947,7 +1015,13 @@ func TestExecDecimal(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -964,7 +1038,7 @@ func TestExecDecimal(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1008,7 +1082,14 @@ func TestExecRowsAffected(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1025,7 +1106,7 @@ func TestExecRowsAffected(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1064,9 +1145,14 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 		dn.ConnectionString(cdi.ConnectionString),
 		dn.ParameterPlaceHolder(cdi.ParameterPlaceholder),
 	)
-
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1083,7 +1169,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1156,7 +1242,13 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1173,7 +1265,7 @@ func TestDeferredRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1248,7 +1340,13 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1265,7 +1363,7 @@ func TestDeferredRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1340,7 +1438,13 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1357,7 +1461,7 @@ func TestDeferredRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1432,7 +1536,14 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1449,7 +1560,7 @@ func TestManualRollbackNestedTransDelete1stQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1524,7 +1635,13 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1541,7 +1658,7 @@ func TestManualRollbackNestedTransDelete2ndQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1616,7 +1733,14 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	)
 
 	// Initialize datahelper handler
-	hndl := DataHelperHandle{}
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
 	if err = hndl.Open(di); err != nil {
 		t.Log(err.Error())
 		t.Fail()
@@ -1633,7 +1757,7 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 	}
 
 	// Acquire handle and context
-	err = c.Acquire(context.Background(), &hndl)
+	err = c.Acquire(context.Background(), hndl)
 	if err != nil {
 		t.Log(err.Error())
 		t.Fail()

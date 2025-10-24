@@ -10,18 +10,22 @@ import (
 	dn "github.com/eaglebush/datainfo"
 )
 
-// DataHelperHandle manages the handle to the database connection
+// Handle manages the handle to the database connection
 //
 // It manages the resident database connection for proper pooling.
 // This struct implements DataHelperHandler interface.
-type DataHelperHandle struct {
+type Handle struct {
 	db  *sql.DB
 	dbi *dn.DataInfo
 	err error
 }
 
+func init() {
+	dhl.SetHandler(`ssdhlite`, &Handle{})
+}
+
 // Open connects to the database and initializes it
-func (h *DataHelperHandle) Open(di *dn.DataInfo) error {
+func (h *Handle) Open(di *dn.DataInfo) error {
 	if di == nil {
 		return fmt.Errorf("open: no data info set")
 	}
@@ -54,7 +58,7 @@ func (h *DataHelperHandle) Open(di *dn.DataInfo) error {
 }
 
 // Ping tests the database connection
-func (h *DataHelperHandle) Ping() error {
+func (h *Handle) Ping() error {
 	if h.db == nil {
 		return fmt.Errorf("ping: %s to use", dhl.ErrHandleNoHandle)
 	}
@@ -66,17 +70,17 @@ func (h *DataHelperHandle) Ping() error {
 }
 
 // DB returns the database handle
-func (h *DataHelperHandle) DB() *sql.DB {
+func (h *Handle) DB() *sql.DB {
 	return h.db
 }
 
 // DI returns the data info that configured the handle
-func (h *DataHelperHandle) DI() *dn.DataInfo {
+func (h *Handle) DI() *dn.DataInfo {
 	return h.dbi
 }
 
 // Close the database connection
-func (h *DataHelperHandle) Close() error {
+func (h *Handle) Close() error {
 	if h.db == nil {
 		return fmt.Errorf("ping: %s to close", dhl.ErrHandleNoHandle)
 	}
@@ -88,6 +92,6 @@ func (h *DataHelperHandle) Close() error {
 }
 
 // Err returns the last error
-func (h *DataHelperHandle) Err() error {
+func (h *Handle) Err() error {
 	return h.err
 }
