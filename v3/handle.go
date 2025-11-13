@@ -32,10 +32,18 @@ func (h *Handle) Open(di *dn.DataInfo) error {
 	if di.ConnectionString == nil {
 		return fmt.Errorf("open: no data connection string set")
 	}
-	h.db, h.err = sql.Open("sqlserver", *di.ConnectionString)
-	if h.err != nil {
-		return fmt.Errorf("open: %w", h.err)
+	// Added to handle sql.Open panic
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from DB panic: %v", r)
+		}
+	}()
+	db, err := sql.Open("sqlserver", *di.ConnectionString)
+	if err != nil {
+		h.err = fmt.Errorf("open: %w", err)
+		return h.err
 	}
+	h.db = db
 	h.dbi = di
 	if di.MaxOpenConnection != nil {
 		h.db.SetMaxOpenConns(*di.MaxOpenConnection)
@@ -50,10 +58,14 @@ func (h *Handle) Open(di *dn.DataInfo) error {
 	if di.MaxConnectionIdleTime != nil {
 		h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
 	}
-	if err := h.db.PingContext(context.Background()); err != nil {
-		h.err = fmt.Errorf("open: %w", err)
+	// Use a timeout for ping
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.db.PingContext(ctx); err != nil {
+		h.err = fmt.Errorf("open: ping failed: %w", err)
 		return h.err
 	}
+	h.err = nil
 	return nil
 }
 
@@ -62,10 +74,13 @@ func (h *Handle) Ping() error {
 	if h.db == nil {
 		return fmt.Errorf("ping: %s to use", dhl.ErrHandleNoHandle)
 	}
-	if err := h.db.PingContext(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.db.PingContext(ctx); err != nil {
 		h.err = fmt.Errorf("ping: %w", err)
 		return h.err
 	}
+	h.err = nil
 	return nil
 }
 
@@ -82,12 +97,13 @@ func (h *Handle) DI() *dn.DataInfo {
 // Close the database connection
 func (h *Handle) Close() error {
 	if h.db == nil {
-		return fmt.Errorf("ping: %s to close", dhl.ErrHandleNoHandle)
+		return fmt.Errorf("close: %s to close", dhl.ErrHandleNoHandle)
 	}
 	if h.err = h.db.Close(); h.err != nil {
 		return h.err
 	}
 	h.db = nil
+	h.err = nil
 	return nil
 }
 
