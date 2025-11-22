@@ -62,6 +62,8 @@ func (h *Handle) Open(di *dn.DataInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := h.db.PingContext(ctx); err != nil {
+		// A failed ping should nullify the db because this is the Open() method
+		h.db = nil
 		h.err = fmt.Errorf("open: ping failed: %w", err)
 		return h.err
 	}
