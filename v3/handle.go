@@ -25,23 +25,23 @@ func init() {
 }
 
 // Open connects to the database and initializes it
-func (h *Handle) Open(di *dn.DataInfo) error {
+func (h *Handle) Open(di *dn.DataInfo) (err error) {
 	if di == nil {
-		return fmt.Errorf("open: no data info set")
+		err = fmt.Errorf("open: no data info set")
+		h.err = err
+		return
 	}
 	if di.ConnectionString == nil {
-		return fmt.Errorf("open: no data connection string set")
+		err = fmt.Errorf("open: no data connection string set")
+		h.err = err
+		return
 	}
-	// Added to handle sql.Open panic
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("Recovered from DB panic: %v", r)
-		}
-	}()
+	handlePanic(&err)
 	db, err := sql.Open("sqlserver", *di.ConnectionString)
 	if err != nil {
-		h.err = fmt.Errorf("open: %w", err)
-		return h.err
+		err = fmt.Errorf("open: %w", err)
+		h.err = err
+		return
 	}
 	h.db = db
 	h.dbi = di
@@ -61,26 +61,31 @@ func (h *Handle) Open(di *dn.DataInfo) error {
 	// Use a timeout for ping
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := h.db.PingContext(ctx); err != nil {
+	if err = h.db.PingContext(ctx); err != nil {
 		// A failed ping should nullify the db because this is the Open() method
 		h.db = nil
-		h.err = fmt.Errorf("open: ping failed: %w", err)
-		return h.err
+		err = fmt.Errorf("open: ping failed: %w", err)
+		h.err = err
+		return
 	}
 	h.err = nil
 	return nil
 }
 
 // Ping tests the database connection
-func (h *Handle) Ping() error {
+func (h *Handle) Ping() (err error) {
 	if h.db == nil {
-		return fmt.Errorf("ping: %s to use", dhl.ErrHandleNoHandle)
+		err = fmt.Errorf("ping: %s to use", dhl.ErrHandleNoHandle)
+		h.err = err
+		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := h.db.PingContext(ctx); err != nil {
-		h.err = fmt.Errorf("ping: %w", err)
-		return h.err
+	handlePanic(&err)
+	if err = h.db.PingContext(ctx); err != nil {
+		err = fmt.Errorf("ping: %w", err)
+		h.err = err
+		return
 	}
 	h.err = nil
 	return nil
@@ -97,12 +102,16 @@ func (h *Handle) DI() *dn.DataInfo {
 }
 
 // Close the database connection
-func (h *Handle) Close() error {
+func (h *Handle) Close() (err error) {
 	if h.db == nil {
-		return fmt.Errorf("close: %s to close", dhl.ErrHandleNoHandle)
+		err = fmt.Errorf("close: %s to close", dhl.ErrHandleNoHandle)
+		h.err = err
+		return
 	}
-	if h.err = h.db.Close(); h.err != nil {
-		return h.err
+	handlePanic(&err)
+	if err = h.db.Close(); err != nil {
+		h.err = err
+		return
 	}
 	h.db = nil
 	h.err = nil

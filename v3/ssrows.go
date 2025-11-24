@@ -39,9 +39,10 @@ func (ss SQLServerRows) Next() bool {
 }
 
 // Scan to destination variables
-func (ss SQLServerRows) Scan(dest ...any) error {
+func (ss SQLServerRows) Scan(dest ...any) (err error) {
 	destq := prepareDest(dest)
-	err := ss.sqr.Scan(destq...)
+	handlePanic(&err)
+	err = ss.sqr.Scan(destq...)
 	if err != nil {
 		return err
 	}
@@ -58,12 +59,13 @@ func (ss SQLServerRows) Values() ([]any, error) {
 }
 
 // Columns from the rows
-func (ss SQLServerRows) Columns() ([]datahelperlite.Column, error) {
+func (ss SQLServerRows) Columns() (ctps []datahelperlite.Column, err error) {
+	handlePanic(&err)
 	cts, err := ss.sqr.ColumnTypes()
 	if err != nil {
 		return nil, err
 	}
-	ctps := make([]datahelperlite.Column, len(cts))
+	ctps = make([]datahelperlite.Column, len(cts))
 	for i, ct := range cts {
 		ctps[i] = Column{
 			name:    ct.Name(),
