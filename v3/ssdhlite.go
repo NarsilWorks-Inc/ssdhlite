@@ -162,7 +162,7 @@ func (dh *SQLServerHelper) Commit() (err error) {
 			dh.rw.Unlock()
 			return
 		}
-		if db := dh.hndl.DB(); db == nil {
+		if db := hndl.DB(); db == nil {
 			dh.rw.Lock()
 			err = fmt.Errorf("commit: %w", dhl.ErrHandleDBNotSet)
 			dh.err = err
@@ -315,6 +315,7 @@ func (dh *SQLServerHelper) rollbk() (err error) {
 	dh.rw.RLock()
 	tx, hndl := dh.tx, dh.hndl
 	dh.rw.RUnlock()
+
 	if hndl == nil {
 		dh.rw.Lock()
 		err = fmt.Errorf("rollbk: %w", dhl.ErrHandleNotSet)
