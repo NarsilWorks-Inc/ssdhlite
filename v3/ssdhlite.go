@@ -65,14 +65,21 @@ func (dh *SQLServerHelper) Begin() (err error) {
 		dh.err = err
 		return
 	}
+
+	db := dh.hndl.DB()
+	if db == nil {
+		err = fmt.Errorf("begin: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		return
+	}
 	if dh.manualCnt > 0 {
 		err = errors.New("begin: cannot mix Begin() with BeginManually() in the same transaction")
 		dh.err = err
 		return
 	}
-	handlePanic(&err)
+	defer handlePanic(&err)
 	if dh.tx == nil {
-		dh.tx, err = dh.hndl.DB().BeginTx(dh.ctx, nil)
+		dh.tx, err = db.BeginTx(dh.ctx, nil)
 		if err != nil {
 			err = fmt.Errorf("begin: %w", err)
 			dh.err = err
@@ -103,14 +110,21 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 		dh.err = err
 		return
 	}
+
+	db := dh.hndl.DB()
+	if db == nil {
+		err = fmt.Errorf("begin-manually: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		return
+	}
 	if dh.trCnt > 0 || len(dh.frames) > 0 {
 		err = errors.New("begin-manually: cannot mix BeginManually() with Begin() in the same transaction")
 		dh.err = err
 		return
 	}
-	handlePanic(&err)
+	defer handlePanic(&err)
 	if dh.tx == nil {
-		dh.tx, err = dh.hndl.DB().BeginTx(dh.ctx, nil)
+		dh.tx, err = db.BeginTx(dh.ctx, nil)
 		if err != nil {
 			err = fmt.Errorf("begin-manually: %w", err)
 			dh.err = err
@@ -137,13 +151,20 @@ func (dh *SQLServerHelper) Commit() (err error) {
 		return dh.Rollback()
 	}
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	// Manual mode
 	if manualCnt > 0 {
 		if hndl == nil {
 			dh.rw.Lock()
 			err = fmt.Errorf("commit: %w", dhl.ErrHandleNotSet)
+			dh.err = err
+			dh.rw.Unlock()
+			return
+		}
+		if db := dh.hndl.DB(); db == nil {
+			dh.rw.Lock()
+			err = fmt.Errorf("commit: %w", dhl.ErrHandleDBNotSet)
 			dh.err = err
 			dh.rw.Unlock()
 			return
@@ -301,11 +322,18 @@ func (dh *SQLServerHelper) rollbk() (err error) {
 		dh.rw.Unlock()
 		return
 	}
+	if db := hndl.DB(); db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("rollbk: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
 	dh.rw.Lock()
 	dh.rollbackTriggered = true // 🔧 Mark rollback occurred
 	dh.rw.Unlock()
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	// serialize finalization
 	dh.finalizeMu.Lock()
@@ -354,8 +382,15 @@ func (dh *SQLServerHelper) Mark(name string) (err error) {
 		dh.rw.Unlock()
 		return
 	}
+	if db := hndl.DB(); db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("mark: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	if trCnt > 0 {
 		_, err = tx.ExecContext(dh.ctx, `SAVE TRAN sp_`+sanitizeName(name)+`;`)
@@ -394,8 +429,15 @@ func (dh *SQLServerHelper) Discard(name string) (err error) {
 		dh.rw.Unlock()
 		return
 	}
+	if db := hndl.DB(); db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("discard: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 	if trCnt > 0 {
 		_, err = tx.ExecContext(dh.ctx, `ROLLBACK TRAN sp_`+sanitizeName(name)+`;`)
 		if err != nil {
@@ -430,6 +472,11 @@ func (dh *SQLServerHelper) Save(name string) (err error) {
 		dh.err = err
 		return
 	}
+	if db := hndl.DB(); db == nil {
+		err = fmt.Errorf("save: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		return
+	}
 
 	// if trCnt > 0 {
 	// 	_, err := tx.ExecContext(dh.ctx, `COMMIT TRAN sp_`+name+`;`)
@@ -459,9 +506,18 @@ func (dh *SQLServerHelper) Query(querySql string, args ...any) (rows dhl.Rows, e
 		return
 	}
 
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("query: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	// Replace question mark (?) parameter with configured query parameter, if there are any
 	// Replace tables meant for interpolation {table} for putting the schema
@@ -473,7 +529,7 @@ func (dh *SQLServerHelper) Query(querySql string, args ...any) (rows dhl.Rows, e
 	if tx != nil {
 		sqr, err = tx.QueryContext(dh.ctx, querySql, args...)
 	} else {
-		sqr, err = hndl.DB().QueryContext(dh.ctx, querySql, args...)
+		sqr, err = db.QueryContext(dh.ctx, querySql, args...)
 	}
 	if err != nil {
 		dh.rw.Lock()
@@ -504,6 +560,15 @@ func (dh *SQLServerHelper) QueryArray(querySql string, out any, args ...any) (er
 		return
 	}
 
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("queryarray: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
 	switch out.(type) {
@@ -522,13 +587,13 @@ func (dh *SQLServerHelper) QueryArray(querySql string, out any, args ...any) (er
 	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	var sqr *sql.Rows
 	if tx != nil {
 		sqr, err = tx.QueryContext(dh.ctx, querySql, args...)
 	} else {
-		sqr, err = hndl.DB().QueryContext(dh.ctx, querySql, args...)
+		sqr, err = db.QueryContext(dh.ctx, querySql, args...)
 	}
 	if err != nil {
 		dh.rw.Lock()
@@ -723,18 +788,26 @@ func (dh *SQLServerHelper) QueryRow(querySql string, args ...any) dhl.Row {
 		dh.rw.Unlock()
 		return NewSQLServerRow(nil)
 	}
+
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		dh.err = fmt.Errorf("queryrow: %w", dhl.ErrHandleDBNotSet)
+		dh.rw.Unlock()
+		return NewSQLServerRow(nil)
+	}
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
 	querySql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(querySql, paraminseq, placeholder), schema)
 	args = refineParameters(args...)
 
-	handlePanic(nil)
+	defer handlePanic(nil)
 	if tx != nil {
 		return NewSQLServerRow(tx.QueryRowContext(dh.ctx, querySql, args...))
 	}
 
-	return NewSQLServerRow(hndl.DB().QueryRowContext(dh.ctx, querySql, args...))
+	return NewSQLServerRow(db.QueryRowContext(dh.ctx, querySql, args...))
 }
 
 // Exec executes data manipulation command and returns the number of affected rows
@@ -756,6 +829,15 @@ func (dh *SQLServerHelper) Exec(querySql string, args ...any) (ra int64, err err
 		return
 	}
 
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("exec: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -765,11 +847,11 @@ func (dh *SQLServerHelper) Exec(querySql string, args ...any) (ra int64, err err
 
 	var sqr sql.Result
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 	if tx != nil {
 		sqr, err = tx.ExecContext(dh.ctx, querySql, args...)
 	} else {
-		sqr, err = hndl.DB().ExecContext(dh.ctx, querySql, args...)
+		sqr, err = db.ExecContext(dh.ctx, querySql, args...)
 	}
 	if err != nil {
 		dh.rw.Lock()
@@ -801,6 +883,15 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (exists boo
 		return
 	}
 
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("exists: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
 	placeholder, paraminseq, schema := dh.getParamDataInfo()
 
 	// replace question mark (?) parameter with configured query parameter, if there are any
@@ -823,7 +914,7 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (exists boo
 	b.WriteByte(';')
 	sqlq := b.String()
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	var cnt int
 	if tx != nil {
@@ -839,7 +930,7 @@ func (dh *SQLServerHelper) Exists(sqlWithParams string, args ...any) (exists boo
 		}
 		return cnt == 1, nil
 	}
-	err = hndl.DB().QueryRowContext(dh.ctx, sqlq, args...).Scan(&cnt)
+	err = db.QueryRowContext(dh.ctx, sqlq, args...).Scan(&cnt)
 	if err != nil {
 		if !errors.Is(err, dhl.ErrNoRows) {
 			dh.rw.Lock()
@@ -865,6 +956,15 @@ func (dh *SQLServerHelper) ExistsExt(tableName string, values []dhl.ColumnFilter
 	if hndl == nil {
 		dh.rw.Lock()
 		err = fmt.Errorf("existsext: %w", dhl.ErrHandleNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("existsext: %w", dhl.ErrHandleDBNotSet)
 		dh.err = err
 		dh.rw.Unlock()
 		return
@@ -912,14 +1012,14 @@ func (dh *SQLServerHelper) ExistsExt(tableName string, values []dhl.ColumnFilter
 		tableNameWithParameters, _ = strings.CutSuffix(tableNameWithParameters, `;`)
 	}
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	sqlq = dhl.InterpolateTable(`SELECT CAST(CASE WHEN (SELECT TOP(1) 1 FROM `+tableNameWithParameters+`) = 1 THEN 1 ELSE 0 END AS BIT);`, schema)
 	var row *sql.Row
 	if tx != nil {
 		row = tx.QueryRowContext(dh.ctx, sqlq, args...)
 	} else {
-		row = hndl.DB().QueryRowContext(dh.ctx, sqlq, args...)
+		row = db.QueryRowContext(dh.ctx, sqlq, args...)
 	}
 	if err := row.Scan(&exists); err != nil {
 		if !errors.Is(err, dhl.ErrNoRows) {
@@ -954,6 +1054,15 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 		return
 	}
 
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("next: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+
 	if next == nil {
 		dh.rw.Lock()
 		err = fmt.Errorf("next: %w", dhl.ErrVarMustBeInit)
@@ -976,7 +1085,7 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 		schema = *di.Schema
 	}
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 
 	// if the database config has set a sequence generator, this will use it
 	sg := di.SequenceGenerator
@@ -1007,7 +1116,7 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 			if tx != nil {
 				sqr, err = tx.ExecContext(dh.ctx, sqlq)
 			} else {
-				sqr, err = hndl.DB().ExecContext(dh.ctx, sqlq)
+				sqr, err = db.ExecContext(dh.ctx, sqlq)
 			}
 			if err != nil {
 				dh.rw.Lock()
@@ -1031,7 +1140,7 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 		if tx != nil {
 			err = tx.QueryRowContext(dh.ctx, sqlq).Scan(next)
 		} else {
-			err = hndl.DB().QueryRowContext(dh.ctx, sqlq).Scan(next)
+			err = db.QueryRowContext(dh.ctx, sqlq).Scan(next)
 		}
 		if err != nil {
 			dh.rw.Lock()
@@ -1060,7 +1169,7 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 		if tx != nil {
 			return tx.QueryRowContext(dh.ctx, sqlq).Scan(next)
 		}
-		return hndl.DB().QueryRowContext(dh.ctx, sqlq).Scan(next)
+		return db.QueryRowContext(dh.ctx, sqlq).Scan(next)
 	}
 	if err = scan(); err == nil {
 		return
@@ -1078,7 +1187,7 @@ func (dh *SQLServerHelper) Next(serial string, next *int64) (err error) {
 					return
 				}
 			} else {
-				if _, err2 := hndl.DB().ExecContext(dh.ctx, ddl); err2 != nil {
+				if _, err2 := db.ExecContext(dh.ctx, ddl); err2 != nil {
 					err = fmt.Errorf("next: %w", err2)
 					return
 				}
@@ -1155,7 +1264,7 @@ func (dh *SQLServerHelper) Ping() (err error) {
 	hndl, ctx := dh.hndl, dh.ctx
 	dh.rw.RUnlock()
 
-	handlePanic(&err)
+	defer handlePanic(&err)
 	if hndl == nil {
 		dh.rw.Lock()
 		err = fmt.Errorf("ping: %w", dhl.ErrHandleNotSet)
@@ -1163,7 +1272,16 @@ func (dh *SQLServerHelper) Ping() (err error) {
 		dh.rw.Unlock()
 		return
 	}
-	return hndl.DB().PingContext(ctx)
+
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		err = fmt.Errorf("ping: %w", dhl.ErrHandleDBNotSet)
+		dh.err = err
+		dh.rw.Unlock()
+		return
+	}
+	return db.PingContext(ctx)
 }
 
 func (dh *SQLServerHelper) getParamDataInfo() (ph string, pis bool, sch string) {
