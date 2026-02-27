@@ -45,21 +45,25 @@ func (h *Handle) Open(di *dn.DataInfo) (err error) {
 	}
 	h.db = db
 	h.dbi = di
+
+	h.db.SetMaxOpenConns(20)
 	if di.MaxOpenConnection != nil {
 		h.db.SetMaxOpenConns(*di.MaxOpenConnection)
 	}
-	h.db.SetMaxIdleConns(0)
+	h.db.SetMaxIdleConns(2)
 	if di.MaxIdleConnection != nil {
 		h.db.SetMaxIdleConns(*di.MaxIdleConnection)
 	}
+	h.db.SetConnMaxLifetime(30 * time.Minute)
 	if di.MaxConnectionLifetime != nil {
 		h.db.SetConnMaxLifetime(time.Duration(*di.MaxConnectionLifetime))
 	}
+	h.db.SetConnMaxIdleTime(2 * time.Minute)
 	if di.MaxConnectionIdleTime != nil {
 		h.db.SetConnMaxIdleTime(time.Duration(*di.MaxConnectionIdleTime))
 	}
 	// Use a timeout for ping
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err = h.db.PingContext(ctx); err != nil {
 		// A failed ping should nullify the db because this is the Open() method
@@ -79,7 +83,7 @@ func (h *Handle) Ping() (err error) {
 		h.err = err
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	handlePanic(&err)
 	if err = h.db.PingContext(ctx); err != nil {
