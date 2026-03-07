@@ -2,8 +2,10 @@ package ssdhlite
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/NarsilWorks-Inc/datahelperlite/v3"
+	dhl "github.com/NarsilWorks-Inc/datahelperlite/v3"
 )
 
 // SQLServerRows struct
@@ -44,6 +46,9 @@ func (ss SQLServerRows) Scan(dest ...any) (err error) {
 	handlePanic(&err)
 	err = ss.sqr.Scan(destq...)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dhl.ErrNoRows
+		}
 		return err
 	}
 	err = copyScannedToDest(dest, destq)
