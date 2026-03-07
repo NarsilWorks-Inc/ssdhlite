@@ -26,8 +26,14 @@ type SQLServerHelper struct {
 	rollbackTriggered,
 	committed bool
 	// LIFO stack of per-scope state. true = ARMED, false = DISARMED
-	frames    []bool
-	manualCnt uint16 // manual-mode nesting
+	frames           []bool
+	manualCnt        uint16 // manual-mode nesting
+	vendorStatements []vendorStmt
+}
+
+type vendorStmt struct {
+	Key   string
+	Value string
 }
 
 func init() {
@@ -37,7 +43,18 @@ func init() {
 
 // NewHelper instantiates new helper
 func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLite {
-	return &SQLServerHelper{}
+	return &SQLServerHelper{
+		vendorStatements: []vendorStmt{
+			{
+				Key:   "NOCOUNT",
+				Value: "SET NOCOUNT ON;",
+			},
+			{
+				Key:   "XABORT",
+				Value: "SET ARITHABORT ON;",
+			},
+		},
+	}
 }
 
 // Acquire sets all queries to a new context from pool.
@@ -1283,6 +1300,25 @@ func (dh *SQLServerHelper) Ping() (err error) {
 		return
 	}
 	return db.PingContext(ctx)
+}
+
+// VendorStatement returns a vendor-specific statement or query when present. Returns an empty string if not present
+func (dh *SQLServerHelper) VendorStatement(key string) string {
+	for _, vs := range dh.vendorStatements {
+		if strings.EqualFold(vs.Key, key) {
+			return vs.Value
+		}
+	}
+	return ""
+}
+
+// VendorStatements Lists the vendor-specific statements implemented in a helper
+func (dh *SQLServerHelper) VendorStatements() []string {
+	stmts := make([]string, 0)
+	for _, vs := range dh.vendorStatements {
+		stmts = append(stmts, vs.Key)
+	}
+	return stmts
 }
 
 func (dh *SQLServerHelper) getParamDataInfo() (ph string, pis bool, sch string) {
