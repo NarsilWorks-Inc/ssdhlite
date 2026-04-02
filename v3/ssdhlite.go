@@ -152,6 +152,11 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 		}
 	}
 
+	// Reset committed when the transaction count is 0
+	if dh.trCnt == 0 {
+		dh.committed = false
+	}
+
 	// Increment transaction count
 	dh.trCnt++
 	dh.manualCnt++
