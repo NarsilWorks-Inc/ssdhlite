@@ -62,11 +62,13 @@ const (
 
 
 		INSERT INTO dbo.MasterTable (ID, Code, [Name]) VALUES (1, 'CODE1', 'Code 1');
+
 		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (1, 'SLAV1CODE1', 'Slave1 Code 1', 1);
 		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (2, 'SLAV1CODE2', 'Slave1 Code 2', 1);
 		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (3, 'SLAV1CODE3', 'Slave1 Code 3', 1);
 		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (4, 'SLAV1CODE4', 'Slave1 Code 4', 1);
 		INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (5, 'SLAV1CODE5', 'Slave1 Code 5', 1);
+
 		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (6, 'SLAV2CODE1', 'Slave2 Code 1', 1);
 		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (7, 'SLAV2CODE2', 'Slave2 Code 2', 1);
 		INSERT INTO dbo.SlaveTable2 (ID, Code, [Name], ParentID) VALUES (8, 'SLAV2CODE3', 'Slave2 Code 3', 1);

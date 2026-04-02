@@ -16,19 +16,18 @@ import (
 
 // SQLServerHelper implements DataHelperLite
 type SQLServerHelper struct {
-	hndl       dhl.DataHelperHandle
-	tx         *sql.Tx
-	ctx        context.Context
-	trCnt      uint16
-	rw         sync.RWMutex
-	finalizeMu sync.Mutex
-	err        error
-	rollbackTriggered,
-	committed bool
-	// LIFO stack of per-scope state. true = ARMED, false = DISARMED
-	frames           []bool
+	hndl             dhl.DataHelperHandle
+	tx               *sql.Tx
+	ctx              context.Context
+	trCnt            uint16
+	rw               sync.RWMutex
+	finalizeMu       sync.Mutex
+	err              error
 	manualCnt        uint16 // manual-mode nesting
 	vendorStatements []vendorStmt
+	frames           []bool // LIFO stack of per-scope state. true = ARMED, false = DISARMED
+	rollbackTriggered,
+	committed bool
 }
 
 type vendorStmt struct {
@@ -37,7 +36,7 @@ type vendorStmt struct {
 }
 
 func init() {
-	dhl.SetHelper(`ssdhlite`, &SQLServerHelper{})
+	dhl.SetHelper("ssdhlite", &SQLServerHelper{})
 	dhl.SetErrNoRows(sql.ErrNoRows)
 }
 
@@ -105,8 +104,6 @@ func (dh *SQLServerHelper) Begin() (err error) {
 	}
 	// Increment transaction count
 	dh.trCnt++
-	dh.committed = false         // ✅ Reset commit state
-	dh.rollbackTriggered = false // ✅ Reset rollback state
 
 	// Track this scope’s deferred rollback
 	dh.frames = append(dh.frames, true) // armed
@@ -118,6 +115,7 @@ func (dh *SQLServerHelper) Begin() (err error) {
 func (dh *SQLServerHelper) BeginManually() (err error) {
 	dh.rw.Lock()
 	defer dh.rw.Unlock()
+
 	if dh.err != nil {
 		err = dh.err
 		return
@@ -127,7 +125,6 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 		dh.err = err
 		return
 	}
-
 	db := dh.hndl.DB()
 	if db == nil {
 		err = fmt.Errorf("begin-manually: %w", dhl.ErrHandleDBNotSet)
@@ -152,18 +149,30 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 	// Increment transaction count
 	dh.trCnt++
 	dh.manualCnt++
-	dh.committed = false         // Reset commit state
-	dh.rollbackTriggered = false // Reset rollback state
+
 	return nil
 }
 
 func (dh *SQLServerHelper) Commit() (err error) {
+
 	dh.rw.RLock()
-	tx, trCnt, committed, rb, herr, hndl, manualCnt := dh.tx, dh.trCnt, dh.committed, dh.rollbackTriggered, dh.err, dh.hndl, dh.manualCnt
+	tx, trCnt,
+		committed,
+		rollbackTriggered,
+		herr,
+		hndl,
+		manualCnt := dh.tx,
+		dh.trCnt,
+		dh.committed,
+		dh.rollbackTriggered,
+		dh.err,
+		dh.hndl, dh.manualCnt
 	dh.rw.RUnlock()
-	if tx == nil || trCnt == 0 || rb || committed {
+
+	if tx == nil || trCnt == 0 || rollbackTriggered || committed {
 		return nil
 	}
+
 	if herr != nil {
 		return dh.Rollback()
 	}
@@ -172,6 +181,7 @@ func (dh *SQLServerHelper) Commit() (err error) {
 
 	// Manual mode
 	if manualCnt > 0 {
+		// Check variables
 		if hndl == nil {
 			dh.rw.Lock()
 			err = fmt.Errorf("commit: %w", dhl.ErrHandleNotSet)
@@ -186,16 +196,20 @@ func (dh *SQLServerHelper) Commit() (err error) {
 			dh.rw.Unlock()
 			return
 		}
+		// Check if manual count is more than 1
 		if manualCnt > 1 {
 			dh.rw.Lock()
 			dh.manualCnt--
 			if dh.trCnt > 0 {
 				dh.trCnt--
 			}
+			err = nil
+			dh.err = err
 			dh.rw.Unlock()
-			return nil
+			return
 		}
-		// outermost manual: real commit
+
+		// Outermost manual: real commit
 		dh.finalizeMu.Lock()
 		err = tx.Commit()
 		dh.finalizeMu.Unlock()
@@ -210,13 +224,14 @@ func (dh *SQLServerHelper) Commit() (err error) {
 		dh.rw.Lock()
 		dh.manualCnt = 0
 		dh.tx = nil
+		dh.committed = false
 		// Treat ErrTxDone as success (idempotent commit)
 		if err == nil || errors.Is(err, sql.ErrTxDone) {
 			dh.committed = true
-			dh.err = nil
-		} else {
-			dh.committed = false
+			err = nil
+			dh.err = err
 		}
+
 		dh.rollbackTriggered = false
 		dh.frames = nil
 		dh.trCnt = 0
@@ -224,8 +239,8 @@ func (dh *SQLServerHelper) Commit() (err error) {
 		return nil
 	}
 
-	// Deferred mode
-	// If the transaction is not the outermost transaction, reduce transaction count.
+	// Deferred mode:
+	// If the transaction is not the outermost transaction, flag the frame as disarmed
 	if trCnt > 1 {
 		dh.rw.Lock()
 		if n := len(dh.frames); n > 0 {
@@ -261,12 +276,13 @@ func (dh *SQLServerHelper) Commit() (err error) {
 	// Mark committed, set transaction to nil and set rollback flag to false
 	dh.rw.Lock()
 	dh.trCnt = 0
+	dh.tx = nil
+	dh.committed = false
 	if err == nil || errors.Is(err, sql.ErrTxDone) {
 		dh.committed = true
 		err = nil
 		dh.err = err
 	}
-	dh.tx = nil
 	dh.rollbackTriggered = false
 	dh.frames = nil
 	dh.rw.Unlock()
@@ -294,12 +310,22 @@ func (dh *SQLServerHelper) Rollback() (err error) {
 			return nil
 		}
 		// outermost manual
-		return dh.rollbk()
+		return dh.realRollback()
 	}
 
-	// Deferred mode
-	// If this scope was committed earlier, its defer no-ops
+	// If there is a database error, rollback
+	if herr != nil {
+		return dh.realRollback()
+	}
+
 	dh.rw.Lock()
+	// Deferred mode:
+	// Note: This part will only return if the previous frame was committed earlier
+	//
+	// If:
+	// 	- the frame count is greater than 0
+	//  - the last frame is disarmed (false, if this scope was committed earlier)
+	// Pop it and return (no-ops)
 	if n := len(dh.frames); n > 0 && !dh.frames[n-1] {
 		dh.frames = dh.frames[:n-1]
 		dh.rw.Unlock()
@@ -307,28 +333,27 @@ func (dh *SQLServerHelper) Rollback() (err error) {
 	}
 	dh.rw.Unlock()
 
-	if herr != nil {
-		return dh.rollbk()
-	}
-
+	// Deferred mode:
+	// Note: This part will only return if the previous frame was NOT committed earlier
+	//
+	// If the transaction count is greater than 1
+	// Reduce the transaction count and scopes (frames)
+	// Pop it and return (no-ops)
 	if trCnt > 1 {
 		dh.rw.Lock()
-		dh.rollbackTriggered = true
 		if n := len(dh.frames); n > 0 {
 			dh.frames = dh.frames[:n-1] // pop armed
 		}
-		if dh.trCnt > 0 {
-			dh.trCnt--
-		}
+		dh.trCnt--
 		dh.rw.Unlock()
 		return nil
 	}
 
 	// If this is the outermost transaction, rollback the transaction
-	return dh.rollbk()
+	return dh.realRollback()
 }
 
-func (dh *SQLServerHelper) rollbk() (err error) {
+func (dh *SQLServerHelper) realRollback() (err error) {
 	dh.rw.RLock()
 	tx, hndl := dh.tx, dh.hndl
 	dh.rw.RUnlock()
@@ -340,6 +365,7 @@ func (dh *SQLServerHelper) rollbk() (err error) {
 		dh.rw.Unlock()
 		return
 	}
+
 	if db := hndl.DB(); db == nil {
 		dh.rw.Lock()
 		err = fmt.Errorf("rollbk: %w", dhl.ErrHandleDBNotSet)
@@ -347,6 +373,7 @@ func (dh *SQLServerHelper) rollbk() (err error) {
 		dh.rw.Unlock()
 		return
 	}
+
 	dh.rw.Lock()
 	dh.rollbackTriggered = true // 🔧 Mark rollback occurred
 	dh.rw.Unlock()

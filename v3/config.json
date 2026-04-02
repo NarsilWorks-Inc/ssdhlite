@@ -6,10 +6,10 @@
     ],
     "Databases" : [
         {
-            "ID" : "DEFAULTX",
+            "ID" : "DEFAULT",
             "Schema": "public",
-            "ConnectionStringX" : "sqlserver://sa:password101@localhost?database=NOTIFICATIONDB&connection+timeout=30",
-            "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPCORE&connection+timeout=30",
+            "ConnectionStringX" : "sqlserver://sa:password101@localhost?database=APPSHUB&connection+timeout=30",
+            "ConnectionString" : "sqlserver://sa:p@ssw0rd@localhost?database=APPSHUB&connection+timeout=30",
             "DriverName" : "sqlserver",
             "InterpolateTables": true,
             "ParameterPlaceholder": "@p",
@@ -24,7 +24,7 @@
             }
         },
         {
-            "ID" : "DEFAULT",
+            "ID" : "DEFAULTX",
             "Schema": "public",
             "ConnectionString" : "sqlserver://sa:xu6DgpD3LteCpSmK@THANOS?database=NOTIFICATIONDB&connection+timeout=30",
             "DriverName" : "sqlserver",
