@@ -1206,7 +1206,7 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 			return
 		}
 		three(dh)
-		dh.Commit()
+		//dh.Commit()
 	}
 
 	one := func(dh dhl.DataHelperLite) {
