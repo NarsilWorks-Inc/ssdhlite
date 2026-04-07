@@ -1187,6 +1187,9 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 		return
 	}
 
+	c.Begin()
+	defer c.Rollback()
+
 	// Delete master record
 	three := func(dh dhl.DataHelperLite) {
 		dh.Begin()
@@ -1209,18 +1212,27 @@ func TestDeferredRollbackNestedTransDeleteNoError(t *testing.T) {
 		//dh.Commit()
 	}
 
-	one := func(dh dhl.DataHelperLite) {
-		dh.Begin()
-		defer dh.Rollback()
-		affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
-		if err != nil {
-			return
-		}
-		two(dh)
-		dh.Commit()
+	// one := func(dh dhl.DataHelperLite) {
+	// 	dh.Begin()
+	// 	defer dh.Rollback()
+	// 	affr, err = dh.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+	// 	if err != nil {
+	// 		return
+	// 	}
+	// 	two(dh)
+	// 	dh.Commit()
+	// }
+
+	// one(c)
+
+	affr, err = c.Exec(`DELETE FROM {SlaveTable1} WHERE ParentID = ?`, 1)
+	if err != nil {
+		return
 	}
 
-	one(c)
+	two(c)
+
+	c.Commit()
 
 	t.Logf(`Affected rows %d`, affr)
 }
