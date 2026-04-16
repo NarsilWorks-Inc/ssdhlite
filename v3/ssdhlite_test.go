@@ -1826,3 +1826,97 @@ func TestManualRollbackNestedTransDelete3rdQueryError(t *testing.T) {
 
 	t.Logf(`Affected rows %d`, affr)
 }
+
+func TestUpsertReturning(t *testing.T) {
+	var affr int64
+
+	// Load configuration
+	cf, err := cfg.Load(`config.json`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Initialize data info
+	cdi := cf.GetDatabaseInfo(`DEFAULT`)
+	di := dn.New(
+		dn.ConnectionString(cdi.ConnectionString),
+		dn.ParameterPlaceHolder(cdi.ParameterPlaceholder),
+	)
+
+	// Initialize datahelper handler
+	// Initialize datahelper handler
+	hndl, err := dhl.NewHandle(`ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	if err = hndl.Open(di); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+	defer hndl.Close()
+
+	// Create new datahelper lite
+	c, err := dhl.New(nil, `ssdhlite`)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Acquire handle and context
+	err = c.Acquire(context.Background(), hndl)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// Drop and Create table
+	// Insert data
+	// The succeeding statement will attempt to delete
+	// the inserted rows
+	_, err = c.Exec(MasterSlaveSQL)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	// INSERT INTO dbo.SlaveTable1 (ID, Code, [Name], ParentID) VALUES (1, 'SLAV1CODE1', 'Slave1 Code 1', 1);
+
+	row, err := c.UpsertReturning(
+		"dbo.SlaveTable1",
+		[]string{"ID", "Code", "[Name]", "ParentID"},
+		[]string{"Code"},
+		//[]string{"[Name]"},
+		nil,
+		[]string{"ID", "Code"},
+		1, "SLAV1CODE3", "Slave 3 Code X", 1,
+	)
+	if err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	var (
+		id   int
+		name string
+	)
+
+	if err = row.Scan(&id, &name); err != nil {
+		t.Log(err.Error())
+		t.Fail()
+		return
+	}
+
+	t.Logf("ID: %d, Name: %s", id, name)
+
+	t.Logf(`Affected rows %d`, affr)
+}

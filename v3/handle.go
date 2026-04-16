@@ -21,7 +21,7 @@ type Handle struct {
 }
 
 func init() {
-	dhl.SetHandler(`ssdhlite`, &Handle{})
+	dhl.SetHandler("ssdhlite", &Handle{})
 }
 
 // Open connects to the database and initializes it

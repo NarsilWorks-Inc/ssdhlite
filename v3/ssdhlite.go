@@ -1340,6 +1340,156 @@ func (dh *SQLServerHelper) Ping() (err error) {
 	return db.PingContext(ctx)
 }
 
+// UpsertReturning inserts a row into the table.
+// If a conflict occurs on the specified unique columns:
+//
+//   - If updateColumns is empty, a no-op update is issued and the existing row is returned unchanged
+//   - If updateColumns is provided, the existing row is updated using the incoming source values
+//
+// Parameters:
+//   - insertColumns - columns in the INSERT. All NOT NULL columns without defaults must be included.
+//   - uniqueColumns - columns defining the conflict target. These should correspond to a unique key or unique index in the database.
+//   - updateColumns -
+//     1. empty or nil → do not modify existing row on conflict
+//     2. non-empty → updates the specified columns using the values provided for insertColumns
+//   - returnColumns - columns to return
+//   - args - values for insertColumns, in order
+//
+// Note: The table and columns that require escaping must be set in the parameters.
+//
+// The method always returns the resulting row.
+func (dh *SQLServerHelper) UpsertReturning(
+	tableName string,
+	insertColumns []string,
+	uniqueColumns []string,
+	updateColumns []string,
+	returnColumns []string,
+	args ...any,
+) (dhl.Row, error) {
+	dh.rw.RLock()
+	tx, herr, hndl := dh.tx, dh.err, dh.hndl
+	dh.rw.RUnlock()
+	if herr != nil {
+		return NewSQLServerRow(nil), herr
+	}
+	if tableName == "" {
+		return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "table name not set")
+	}
+	if len(insertColumns) == 0 {
+		return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "insert columns needs to be set")
+	}
+	if len(uniqueColumns) == 0 {
+		return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "unique columns needs to be set")
+	}
+	if len(returnColumns) == 0 {
+		return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "return columns needs to be set")
+	}
+	if len(insertColumns) != len(args) {
+		return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "insert columns count and arguments mismatch")
+	}
+	if len(updateColumns) > 0 {
+		for _, updCol := range updateColumns {
+			found := false
+			for _, insCol := range insertColumns {
+				if strings.EqualFold(insCol, updCol) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return NewSQLServerRow(nil), fmt.Errorf("upsertreturning: %s", "update columns does not exist in insert columns")
+			}
+		}
+	}
+
+	if hndl == nil {
+		dh.rw.Lock()
+		dh.err = fmt.Errorf("upsertreturning: %w", dhl.ErrHandleNotSet)
+		dh.rw.Unlock()
+		return NewSQLServerRow(nil), dh.err
+	}
+
+	db := hndl.DB()
+	if db == nil {
+		dh.rw.Lock()
+		dh.err = fmt.Errorf("upsertreturning: %w", dhl.ErrHandleDBNotSet)
+		dh.rw.Unlock()
+		return NewSQLServerRow(nil), dh.err
+	}
+
+	// Build query
+	sep := ""
+	sql := "UPDATE t \n"
+	sql += "SET "
+	if len(updateColumns) == 0 {
+		col := insertColumns[0]
+		sql += col + " = " + "t." + col + "\n"
+	} else {
+		for _, updCol := range updateColumns {
+			sql += sep + updCol + " = s." + updCol
+			sep = ","
+		}
+		sql += "\n"
+	}
+
+	sql += "OUTPUT "
+	sep = ""
+	for _, retCol := range returnColumns {
+		sql += sep + "inserted." + retCol
+		sep = ","
+	}
+	sql += "\n"
+
+	sql += "FROM " + tableName + " AS t \n"
+	sql += "	INNER JOIN (\n"
+	sql += "		SELECT \n"
+	for i, insCol := range insertColumns {
+		sep = ","
+		if i == len(insertColumns)-1 {
+			sep = ""
+		}
+		sql += "		? AS " + insCol + sep + "\n"
+	}
+	sql += ") AS s ON "
+	sep = ""
+	for _, unqCol := range uniqueColumns {
+		sql += sep + " t." + unqCol + " = s." + unqCol
+		sep = " AND "
+	}
+	sql += "\n"
+
+	sql += "IF @@ROWCOUNT = 0\n"
+	sql += "BEGIN\n"
+	sql += "	INSERT INTO " + tableName + " (" + strings.Join(insertColumns, ",") + ")\n"
+	sql += "	OUTPUT "
+	sep = ""
+	for _, retCol := range returnColumns {
+		sql += sep + "inserted." + retCol
+		sep = ","
+	}
+	sql += "\n"
+	sql += "	VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(insertColumns)), ",") + ")\n"
+	sql += "END"
+
+	placeholder, paraminseq, schema := dh.getParamDataInfo()
+
+	// replace question mark (?) parameter with configured query parameter, if there are any
+	sql = dhl.InterpolateTable(dhl.ReplaceQueryParamMarker(sql, paraminseq, placeholder), schema)
+	args = refineParameters(args...)
+
+	// Since we are populating a pseudo table with values from arguments,
+	// we should create a duplicate and add it to the arguments
+	execArgs := append([]any{}, args...)
+	execArgs = append(execArgs, args...)
+
+	defer handlePanic(nil)
+	if tx != nil {
+		return NewSQLServerRow(tx.QueryRowContext(dh.ctx, sql, execArgs...)), nil
+	}
+
+	return NewSQLServerRow(db.QueryRowContext(dh.ctx, sql, execArgs...)), nil
+}
+
 // VendorStatement returns a vendor-specific statement or query when present. Returns an empty string if not present
 func (dh *SQLServerHelper) VendorStatement(key string) string {
 	for _, vs := range dh.vendorStatements {
