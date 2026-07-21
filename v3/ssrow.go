@@ -21,8 +21,14 @@ func NewSQLServerRow(sqlr *sql.Row) SQLServerRow {
 
 // Scan to destination variables
 func (ss SQLServerRow) Scan(dest ...any) (err error) {
+	defer handlePanic(&err)
+
+	if ss.sqr == nil {
+		return errors.New("SQLServerRow.Scan: underlying sql.Row is nil")
+	}
+
 	destq := prepareDest(dest)
-	handlePanic(&err)
+
 	if err = ss.sqr.Scan(destq...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return dhl.ErrNoRows

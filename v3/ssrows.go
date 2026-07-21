@@ -32,18 +32,30 @@ func (ss SQLServerRows) Close() error {
 
 // Err check
 func (ss SQLServerRows) Err() error {
+	if ss.sqr == nil {
+		return errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+	}
 	return ss.sqr.Err()
 }
 
 // Next row in the sequence
 func (ss SQLServerRows) Next() bool {
+	if ss.sqr == nil {
+		return false
+	}
 	return ss.sqr.Next()
 }
 
 // Scan to destination variables
 func (ss SQLServerRows) Scan(dest ...any) (err error) {
+	defer handlePanic(&err)
+
+	if ss.sqr == nil {
+		return errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+	}
+
 	destq := prepareDest(dest)
-	handlePanic(&err)
+
 	err = ss.sqr.Scan(destq...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -65,7 +77,10 @@ func (ss SQLServerRows) Values() ([]any, error) {
 
 // Columns from the rows
 func (ss SQLServerRows) Columns() (ctps []datahelperlite.Column, err error) {
-	handlePanic(&err)
+	defer handlePanic(&err)
+	if ss.sqr == nil {
+		return nil, errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+	}
 	cts, err := ss.sqr.ColumnTypes()
 	if err != nil {
 		return nil, err
