@@ -3,6 +3,7 @@ package ssdhlite
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/NarsilWorks-Inc/datahelperlite/v3"
 	dhl "github.com/NarsilWorks-Inc/datahelperlite/v3"
@@ -33,7 +34,7 @@ func (ss SQLServerRows) Close() error {
 // Err check
 func (ss SQLServerRows) Err() error {
 	if ss.sqr == nil {
-		return errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+		return fmt.Errorf("SQLServerRows.Scan: %w", dhl.ErrUnderlyingRowsNotSet)
 	}
 	return ss.sqr.Err()
 }
@@ -51,7 +52,7 @@ func (ss SQLServerRows) Scan(dest ...any) (err error) {
 	defer handlePanic(&err)
 
 	if ss.sqr == nil {
-		return errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+		return fmt.Errorf("SQLServerRows.Scan: %w", dhl.ErrUnderlyingRowsNotSet)
 	}
 
 	destq := prepareDest(dest)
@@ -79,7 +80,7 @@ func (ss SQLServerRows) Values() ([]any, error) {
 func (ss SQLServerRows) Columns() (ctps []datahelperlite.Column, err error) {
 	defer handlePanic(&err)
 	if ss.sqr == nil {
-		return nil, errors.New("SQLServerRows.Scan: underlying sql.Rows is nil")
+		return nil, fmt.Errorf("SQLServerRows.Scan: %w", dhl.ErrUnderlyingRowsNotSet)
 	}
 	cts, err := ss.sqr.ColumnTypes()
 	if err != nil {

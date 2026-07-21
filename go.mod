@@ -10,9 +10,9 @@ require (
 require github.com/golang-sql/sqlexp v0.1.0 // indirect
 
 require (
-	github.com/NarsilWorks-Inc/datahelperlite v0.1.30
-	github.com/eaglebush/config v0.1.4
+	github.com/NarsilWorks-Inc/datahelperlite v0.1.32
+	github.com/eaglebush/config v0.1.8
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/shopspring/decimal v1.4.0
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
 )

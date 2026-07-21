@@ -3,6 +3,7 @@ package ssdhlite
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	dhl "github.com/NarsilWorks-Inc/datahelperlite/v3"
 )
@@ -24,7 +25,7 @@ func (ss SQLServerRow) Scan(dest ...any) (err error) {
 	defer handlePanic(&err)
 
 	if ss.sqr == nil {
-		return errors.New("SQLServerRow.Scan: underlying sql.Row is nil")
+		return fmt.Errorf("SQLServerRow.Scan: %w", dhl.ErrUnderlyingRowNotSet)
 	}
 
 	destq := prepareDest(dest)
