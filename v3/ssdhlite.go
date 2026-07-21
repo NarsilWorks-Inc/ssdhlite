@@ -63,13 +63,6 @@ func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandle) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	dh.trCnt = 0
-	dh.err = nil
-	dh.manualCnt = 0
-	dh.frames = nil
-	dh.rollbackTriggered = false
-	dh.committed = false
 	dh.ctx = ctx
 	dh.hndl = h
 	return nil
