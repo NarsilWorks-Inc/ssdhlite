@@ -56,7 +56,9 @@ func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 	}
 }
 
-// Acquire sets all queries to a new context from pool.
+// Acquire updates the context and handle used by this helper.
+// It does not reset or finalize transaction state.
+// A helper should not be shared concurrently or reused across independent requests.
 func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandle) error {
 	dh.rw.Lock()
 	defer dh.rw.Unlock()
