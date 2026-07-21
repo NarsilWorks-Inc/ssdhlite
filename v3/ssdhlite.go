@@ -60,9 +60,6 @@ func (dh *SQLServerHelper) NewHelper() dhl.DataHelperLite {
 func (dh *SQLServerHelper) Acquire(ctx context.Context, h dhl.DataHelperHandle) error {
 	dh.rw.Lock()
 	defer dh.rw.Unlock()
-	if dh.tx != nil {
-		return fmt.Errorf("acquire: %w", dhl.ErrHandleTxNotNil)
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
