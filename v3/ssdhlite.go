@@ -127,6 +127,7 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 		err = dh.err
 		return
 	}
+
 	if isInterfaceNil(dh.hndl) {
 		err = fmt.Errorf("begin-manually: %w", dhl.ErrHandleNotSet)
 		dh.err = err
@@ -139,11 +140,13 @@ func (dh *SQLServerHelper) BeginManually() (err error) {
 		dh.err = err
 		return
 	}
-	if dh.trCnt > 0 || len(dh.frames) > 0 {
+
+	if dh.manualCnt == 0 && (dh.trCnt > 0 || len(dh.frames) > 0) {
 		err = errors.New("begin-manually: cannot mix BeginManually() with Begin() in the same transaction")
 		dh.err = err
 		return
 	}
+
 	defer handlePanic(&err)
 	if dh.tx == nil {
 		dh.tx, err = db.BeginTx(dh.ctx, nil)
@@ -187,7 +190,15 @@ func (dh *SQLServerHelper) Commit() (err error) {
 	}
 
 	if herr != nil {
-		return dh.Rollback()
+		lErr := dh.Rollback()
+		dh.rw.RLock()
+		dh.err = errors.Join(
+			fmt.Errorf(
+				"commit: transaction rolled back due to error: %w",
+				herr,
+			), lErr)
+		dh.rw.RUnlock()
+		return dh.err
 	}
 
 	defer handlePanic(&err)
@@ -223,9 +234,7 @@ func (dh *SQLServerHelper) Commit() (err error) {
 		}
 
 		// Outermost manual: real commit
-		dh.finalizeMu.Lock()
-		err = tx.Commit()
-		dh.finalizeMu.Unlock()
+		err = dh.commitTx(tx)
 		if err != nil && !errors.Is(err, sql.ErrTxDone) {
 			dh.rw.Lock()
 			err = fmt.Errorf("commit: %w", err)
@@ -275,9 +284,7 @@ func (dh *SQLServerHelper) Commit() (err error) {
 
 	// Serialize finalization
 	// Commit the outermost transaction
-	dh.finalizeMu.Lock()
-	err = tx.Commit()
-	dh.finalizeMu.Unlock()
+	err = dh.commitTx(tx)
 	if err != nil && !errors.Is(err, sql.ErrTxDone) {
 		dh.rw.Lock()
 		err = fmt.Errorf("commit: %w", err)
@@ -322,6 +329,7 @@ func (dh *SQLServerHelper) Rollback() (err error) {
 			dh.rw.Unlock()
 			return nil
 		}
+		dh.manualCnt = 0
 		// outermost manual
 		return dh.realRollback()
 	}
@@ -382,9 +390,7 @@ func (dh *SQLServerHelper) realRollback() (err error) {
 	defer handlePanic(&err)
 
 	// serialize finalization
-	dh.finalizeMu.Lock()
-	err = tx.Rollback()
-	dh.finalizeMu.Unlock()
+	err = dh.rollbkTx(tx)
 	if err != nil && !errors.Is(err, sql.ErrTxDone) {
 		dh.rw.Lock()
 		err = fmt.Errorf("rollbk: %w", err)
@@ -1547,4 +1553,20 @@ func sanitizeName(s string) string {
 		return "sp"
 	}
 	return string(b)
+}
+
+func (dh *SQLServerHelper) commitTx(tx *sql.Tx) (err error) {
+	dh.finalizeMu.Lock()
+	defer dh.finalizeMu.Unlock()
+	defer handlePanic(&err)
+
+	return tx.Commit()
+}
+
+func (dh *SQLServerHelper) rollbkTx(tx *sql.Tx) (err error) {
+	dh.finalizeMu.Lock()
+	defer dh.finalizeMu.Unlock()
+	defer handlePanic(&err)
+
+	return tx.Rollback()
 }
