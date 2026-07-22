@@ -160,7 +160,6 @@ func (h *Handle) Close() (err error) {
 		return err
 	}
 	h.db = nil
-	h.dbi = nil
 	h.err = nil
 	h.stateMu.Unlock()
 
