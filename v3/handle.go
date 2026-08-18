@@ -61,6 +61,11 @@ func (h *Handle) Open(di *dn.DataInfo) (err error) {
 		return errors.New("open: no data connection string set")
 	}
 
+	// DataInfo is valid. Update handle
+	h.stateMu.Lock()
+	h.dbi = info
+	h.stateMu.Unlock()
+
 	candidate, err = sql.Open("sqlserver", *info.ConnectionString)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
@@ -77,7 +82,6 @@ func (h *Handle) Open(di *dn.DataInfo) (err error) {
 	h.stateMu.Lock()
 	previous := h.db
 	h.db = candidate
-	h.dbi = info
 	h.err = nil
 	published = true
 	h.stateMu.Unlock()
